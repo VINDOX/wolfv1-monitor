@@ -2,10 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦊</text></svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WOLF V1 Deployment Monitor — Algorithm Inc.</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
+html{color-scheme:light only;}
+body{background:white!important;color:#333!important;}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f4f8;color:#1a2333;font-size:14px}
 
@@ -287,7 +290,7 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
     <div id="roleBadge" style="display:none;margin-bottom:8px;text-align:center"></div>
     <label class="form-label">PIN Code</label>
     <input type="password" class="form-input" id="loginPin" placeholder="Enter your PIN" maxlength="6" onkeydown="if(event.key==='Enter')doLogin()">
-    <button class="btn-primary" onclick="doLogin()">Login →</button>
+    <button class="btn-primary" id="loginBtn" onclick="doLogin()">Login →</button>
     <div class="hint">Contact coordinator for your PIN</div>
   </div>
 </div>
@@ -298,7 +301,7 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
     <div class="logo" onclick="goHome()" style="cursor:pointer" title="Go to Home">🏠 ALGORITHM INC.</div>
     <div>
       <div class="htitle">ISHYIGA WOLF V1 — Deployment Monitor</div>
-      <div class="hsub">333 pharmacy clients · May 21 – June 30, 2026</div>
+      <div class="hsub" id="homeSubtitle">Loading clients...</div>
     </div>
     <div class="user-badge">
       <span id="headerUser"></span>
@@ -373,8 +376,8 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
       <div class="sync-bar">
         <span class="sync-dot" id="syncDot"></span>
         <span id="syncMsg">Connecting...</span>
-        <button onclick="loadAll()" style="padding:4px 12px;border-radius:5px;border:1px solid #ddd;background:white;cursor:pointer;font-size:12px;margin-left:8px">🔄 Refresh</button>
-        ${isCoordinator?'<button onclick="exportData()" style="padding:4px 14px;border-radius:5px;border:1px solid #2E7D32;background:#E8F5E9;color:#2E7D32;cursor:pointer;font-size:12px;font-weight:600;margin-left:6px">📥 Download Excel</button><span style=\"font-size:11px;color:#aaa;margin-left:4px\">exports current filters</span>':''}
+        <button onclick="loadChangesOnly()" style="padding:4px 12px;border-radius:5px;border:1px solid #ddd;background:white;cursor:pointer;font-size:12px;margin-left:8px">🔄 Refresh</button>
+        <span id="exportExcelBtn" style="display:none"><button onclick="exportData()" style="padding:4px 14px;border-radius:5px;border:1px solid #2E7D32;background:#E8F5E9;color:#2E7D32;cursor:pointer;font-size:12px;font-weight:600;margin-left:6px">📥 Download Excel</button><span style="font-size:11px;color:#aaa;margin-left:4px">exports current filters</span></span>
         <select id="monitorPerPage" onchange="monitorCurrentPage=1;mobileCurrentPage=1;renderTable();renderMobileCards();" style="padding:4px 8px;border-radius:6px;border:1.5px solid #ddd;font-size:12px;background:white;outline:none;margin-left:8px">
           <option value="20">20 rows</option>
           <option value="50">50 rows</option>
@@ -397,10 +400,6 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
         </select>
         <select id="filterSector" onchange="renderTable()" style="flex:1;min-width:120px;padding:8px 12px;border-radius:8px;border:1.5px solid #ddd;font-size:13px;background:white;color:#1a2333;outline:none">
           <option value="">All Sectors</option>
-          <option value="PHARMACY">Pharmacy</option>
-          <option value="HOSPITAL">Hospital</option>
-          <option value="CLINIC">Clinic</option>
-          <option value="DEPOT">Depot</option>
         </select>
         <span class="result-count" id="resultCount"></span>
       </div>
@@ -419,26 +418,72 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
     </div>
 
     <div id="tab-agents" style="display:none">
+      <div style="background:white;border-radius:10px;padding:10px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:600;color:#003366">📅 Period:</span>
+        <input type="date" id="agentsDateFrom" onchange="syncPeriodFromAgents()" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:13px">
+        <span style="color:#888">→</span>
+        <input type="date" id="agentsDateTo" onchange="syncPeriodFromAgents()" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:13px">
+        <button onclick="clearAgentsPeriod()" style="padding:5px 12px;border-radius:6px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;font-size:12px">✕ All</button>
+      </div>
+      <div id="agentNoPeriodWarn" style="display:none;background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:10px">
+        <span style="font-size:18px">⚠️</span>
+        <div><div style="font-size:13px;font-weight:600;color:#E65100">No period selected — showing all time</div>
+        <div style="font-size:12px;color:#888">Select a date range above to filter by period</div></div>
+      </div>
       <div class="agent-grid" id="agentGrid"></div>
     </div>
 
     <!-- MANAGERS TAB -->
     <div id="tab-managers" style="display:none">
+      <div style="background:white;border-radius:10px;padding:10px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:600;color:#003366">📅 Period:</span>
+        <input type="date" id="managerDateFrom" onchange="syncPeriodFromManagers()" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:13px">
+        <span style="color:#888">→</span>
+        <input type="date" id="managerDateTo" onchange="syncPeriodFromManagers()" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:13px">
+        <button onclick="clearManagersPeriod()" style="padding:5px 12px;border-radius:6px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;font-size:12px">✕ All</button>
+        <button onclick="loadChangesOnly().then(()=>renderManagersDashboard())" style="margin-left:auto;padding:5px 14px;border-radius:6px;border:1px solid #003366;background:#E3F2FD;color:#003366;cursor:pointer;font-size:12px;font-weight:600">🔄 Refresh</button>
+      </div>
       <!-- Manager dashboard for coordinator -->
       <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
         <button onclick="loadAll().then(()=>{renderManagersDashboard();console.log('Bonuses:',managerBonuses);})" style="padding:5px 14px;border-radius:6px;border:1px solid #003366;background:#E3F2FD;color:#003366;cursor:pointer;font-size:12px;font-weight:600">🔄 Refresh</button>
         <span id="bonusDebug" style="font-size:11px;color:#888;margin-left:8px"></span>
+      </div>
+      <div id="mgrNoPeriodWarn" style="display:none;background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:10px">
+        <span style="font-size:18px">⚠️</span>
+        <div><div style="font-size:13px;font-weight:600;color:#E65100">No period selected — earnings may not be accurate</div>
+        <div style="font-size:12px;color:#888">Select a date range above to filter by period</div></div>
       </div>
       <div id="managerDashboard"></div>
     </div>
 
     <!-- MANAGER PERSONAL TAB (for manager role login) -->
     <div id="tab-myteam" style="display:none">
+      <div style="background:white;border-radius:10px;padding:10px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:600;color:#003366">📅 Period:</span>
+        <input type="date" id="myteamDateFrom" onchange="syncPeriodFromMyTeam()" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:13px">
+        <span style="color:#888">→</span>
+        <input type="date" id="myteamDateTo" onchange="syncPeriodFromMyTeam()" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:13px">
+        <button onclick="clearMyTeamPeriod()" style="padding:5px 12px;border-radius:6px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;font-size:12px">✕ All</button>
+      </div>
+      <div id="myteamNoPeriodWarn" style="display:none;background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:10px">
+        <span style="font-size:18px">⚠️</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#E65100">No period selected — showing all time</div>
+          <div style="font-size:12px;color:#888">Select a date range above for accurate earnings</div>
+        </div>
+      </div>
       <div id="myTeamDashboard"></div>
     </div>
 
     <!-- FINANCE TAB -->
     <div id="tab-finance" style="display:none">
+      <div id="finNoPeriodWarn" style="display:none;background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:10px">
+        <span style="font-size:18px">⚠️</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#E65100">No period selected — showing all time data</div>
+          <div style="font-size:12px;color:#888">Select a date range to filter earnings by period</div>
+        </div>
+      </div>
 
       <!-- EXPORT BUTTONS — top of Finance tab -->
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
@@ -568,6 +613,25 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
 
       <!-- ACCESS CONTROL -->
       <div style="background:white;border-radius:12px;padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:16px">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:8px">
+          <button onclick="clearStaticCache();showToast('Cache cleared — refresh to reload','success')" style="padding:5px 14px;border-radius:6px;border:1px solid #E65100;background:#FFF3E0;color:#E65100;cursor:pointer;font-size:12px">🗑 Clear Cache</button>
+        </div>
+        <!-- DATE EDIT WINDOW -->
+        <div style="background:white;border-radius:12px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.08)">
+          <div style="font-size:14px;font-weight:600;color:#003366;margin-bottom:12px">📅 Support Date Edit Window</div>
+          <div style="font-size:12px;color:#666;margin-bottom:12px">When open, support agents can set/change their own clients visit dates within the allowed period.</div>
+          <div id="dateWindowStatus" style="margin-bottom:12px"></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+            <span style="font-size:13px;color:#555">From:</span>
+            <input type="date" id="dateWindowFrom" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:13px">
+            <span style="font-size:13px;color:#555">To:</span>
+            <input type="date" id="dateWindowTo" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:13px">
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button onclick="openDateEditWindow()" style="padding:6px 16px;border-radius:6px;border:none;background:#2E7D32;color:white;cursor:pointer;font-size:13px;font-weight:600">🔓 Open Window</button>
+            <button onclick="closeDateEditWindow()" style="padding:6px 16px;border-radius:6px;border:none;background:#C62828;color:white;cursor:pointer;font-size:13px;font-weight:600">🔒 Close Window</button>
+          </div>
+        </div>
         <div class="section-title" style="border:none;margin-bottom:4px">🔐 Role Access Control</div>
         <p style="font-size:13px;color:#666;margin-bottom:16px">Configure what each role can access and do in the system.</p>
         <div id="accessControlUI"></div>
@@ -672,8 +736,8 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
     <h3>➕ Add New Client</h3>
     <div class="alert-err" id="addClientErr"></div>
     <div class="alert-ok" id="addClientOk"></div>
-    <label class="form-label">Client / Pharmacy Name</label>
-    <input type="text" class="form-input" id="nc_name" placeholder="e.g. EXAMPLE PHARMACY LTD">
+    <label class="form-label">Client Name</label>
+    <input type="text" class="form-input" id="nc_name" placeholder="e.g. CLIENT NAME LTD">
     <div class="grid-2">
       <div>
         <label class="form-label">Assign to Support Agent</label>
@@ -758,7 +822,7 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
     <div class="alert-err" id="editClientErr"></div>
     <input type="hidden" id="ec_id">
     <input type="hidden" id="ec_idx">
-    <label class="form-label">Client / Pharmacy Name</label>
+    <label class="form-label">Client Name</label>
     <input type="text" class="form-input" id="ec_name" placeholder="Client name">
     <div class="grid-2">
       <div>
@@ -833,13 +897,13 @@ header .hbtn:hover{background:rgba(255,255,255,0.35)}
 <script>
 // Run in Supabase SQL: ALTER TABLE clients ADD COLUMN IF NOT EXISTS location TEXT;
 // Run in Supabase SQL: ALTER TABLE clients ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-// Run in Supabase SQL: ALTER TABLE clients ADD COLUMN IF NOT EXISTS sector TEXT DEFAULT 'PHARMACY';
+// Run in Supabase SQL: ALTER TABLE clients ADD COLUMN IF NOT EXISTS sector TEXT DEFAULT 'OTHER';
 // Run in Supabase SQL: ALTER TABLE client_overrides ADD COLUMN IF NOT EXISTS sector TEXT;
 // Run in Supabase SQL: ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
 // Run in Supabase SQL: ALTER TABLE deployments ADD COLUMN IF NOT EXISTS photo_url TEXT;
 // Run in Supabase SQL: ALTER TABLE clients ADD COLUMN IF NOT EXISTS location TEXT;
 // Run in Supabase SQL: ALTER TABLE clients ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-// Run in Supabase SQL: ALTER TABLE clients ADD COLUMN IF NOT EXISTS sector TEXT DEFAULT 'PHARMACY';
+// Run in Supabase SQL: ALTER TABLE clients ADD COLUMN IF NOT EXISTS sector TEXT DEFAULT 'OTHER';
 // Run in Supabase SQL: ALTER TABLE client_overrides ADD COLUMN IF NOT EXISTS sector TEXT;
 // Run in Supabase SQL: ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
 // Run in Supabase SQL: INSERT INTO users (name,pin,role) VALUES ('__statuses__','["Pending","Email Sent","Convincing","Done","Refused","Rescheduled"]','system') ON CONFLICT (name) DO NOTHING;
@@ -849,7 +913,7 @@ const{createClient}=supabase;
 const db=createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ── STATIC CLIENT DATA (from Excel) ───────────────────────
-const STATIC_CLIENTS=[];  // Loaded from Supabase on login
+let STATIC_CLIENTS=[];  // Loaded from Supabase on login
 
 let BASIC_SALARY=[]; // loaded from Supabase
 let STATUSES=["Pending","Email Sent","Convincing","Done","Refused","Rescheduled"];
@@ -876,8 +940,10 @@ let editingNote=null,dateFrom='',dateTo='',pollTimer=null,resetUserId=null;
 let MANAGER_BASE=500000;
 let teamAssignments=[];
 let managerBonuses=[];
+let supportBonuses=[];
 let allManagersList=[];
 let MANAGER_INFO={};
+let managerPerformanceBudget={};
 let overridesData=[];
 
 let paymentStatus={};
@@ -887,9 +953,30 @@ let selectedClients=new Set();
 let supportAlertsVisible=false;
 
 // ── SUPABASE HELPERS ───────────────────────────────────────
+let isFirstLoad=true;
+let isSaving=false;
+let dateEditWindow={open:false,from:'',to:'',openedBy:''}; // coordinator sets this
+
+let _pollRunning=false;
 async function loadAll(){
-  setSyncing(true);
+  if(isSaving) return;
+  if(_pollRunning){console.log('Poll skipped - busy');return;}
+  _pollRunning=true;
   try{
+    if(isFirstLoad){
+      setSyncing(true);
+      return await loadAllFull();
+    } else {
+      return await loadChangesOnly();
+    }
+  }catch(e){console.warn('loadAll error:',e.message);}
+  finally{_pollRunning=false;}
+}
+
+// FULL LOAD — only on first login
+async function loadAllFull(){
+  try{
+    updateLoading('Loading clients...',20);
     // Load all data IN PARALLEL for speed
     const[
       statusRes,
@@ -900,6 +987,7 @@ async function loadAll(){
       configRes,
       teamAssignRes,
       managerBonusRes,
+      supportBonusRes,
       managersRes
     ] = await Promise.all([
       db.from('users').select('pin').eq('name','__statuses__').limit(1).then(r=>r).catch(()=>({data:[]})),
@@ -909,10 +997,11 @@ async function loadAll(){
       (STATIC_CLIENTS.length>0?Promise.resolve({data:null}):db.from('static_clients').select('*').order('id').then(r=>r).catch(()=>({data:[]}))),
       // Config rows - only fetch on first load
       (paymentStatus&&Object.keys(paymentStatus).length>0?Promise.resolve({data:null}):
-        db.from('users').select('name,pin').in('name',['__payments__','__basic_salary__','__manager_base__','__manager_titles__','__access_control__']).then(r=>r).catch(()=>({data:[]}))),
+        db.from('users').select('name,pin').in('name',['__payments__','__basic_salary__','__manager_base__','__manager_titles__','__access_control__','__mgr_performance__','__date_edit_window__']).then(r=>r).catch(()=>({data:[]}))),
       (teamAssignments.length>0?Promise.resolve({data:null}):
         db.from('team_assignments').select('*').then(r=>r).catch(()=>({data:[]}))),
       db.from('manager_bonuses').select('*').order('created_at',{ascending:false}).then(r=>r).catch(()=>({data:[]})),
+      db.from('manager_bonuses').select('*').eq('type','support').order('created_at',{ascending:false}).then(r=>r).catch(()=>({data:[]})),
       (allManagersList.length>0?Promise.resolve({data:null}):
         db.from('users').select('id,name,pin,role,active,base_salary').eq('role','manager').then(r=>r).catch(()=>({data:[]})))
     ]);
@@ -922,7 +1011,7 @@ async function loadAll(){
       const sc=staticRes.data;
       sc.forEach((r,i)=>{
         STATIC_CLIENTS[i]=[r.support_name,r.client_name,r.scheduled_date,
-          r.contracted_amount,r.branches||0,(r.location||'').toUpperCase(),(r.sector||'PHARMACY').toUpperCase()];
+          r.contracted_amount,r.branches||0,(r.location||'').toUpperCase(),(r.sector||'OTHER').toUpperCase()];
       });
     }
 
@@ -946,6 +1035,13 @@ async function loadAll(){
         if(pRow&&pRow.pin) paymentStatus=JSON.parse(pRow.pin);
         if(bRow&&bRow.pin) BASIC_SALARY=JSON.parse(bRow.pin);
         if(mRow&&mRow.pin) MANAGER_BASE=parseInt(mRow.pin)||500000;
+        const perfRow=configs.find(r=>r.name==='__mgr_performance__');
+        if(perfRow&&perfRow.pin) managerPerformanceBudget=JSON.parse(perfRow.pin);
+        // Load date edit window setting
+        const dateWinRow=configs.find(r=>r.name==='__date_edit_window__');
+        if(dateWinRow&&dateWinRow.pin){
+          try{dateEditWindow=JSON.parse(dateWinRow.pin)||{open:false,from:'',to:'',openedBy:''};}catch(e){}
+        }
         if(tRow&&tRow.pin){
           const titles=JSON.parse(tRow.pin);
           // Apply titles to MANAGER_INFO
@@ -964,6 +1060,7 @@ async function loadAll(){
     try{ managerBonuses=managerBonusRes.data||[]; }catch(e){}
     // Update manager bell badge after loading
     if(currentRole==='manager'&&!isCoordinator) setTimeout(renderSupportAlerts,100);
+    updateLoading('Loading team data...',75);
     // Process managers list (only if freshly fetched)
     try{
       if(managersRes.data) allManagersList=managersRes.data;
@@ -990,7 +1087,7 @@ async function loadAll(){
       overrides.forEach(o=>{
         const idx=o.client_index;
         if(idx>=0&&idx<STATIC_CLIENTS.length){
-          STATIC_CLIENTS[idx]=[o.support_name,o.client_name,o.scheduled_date,o.contracted_amount,o.branches||0,(o.location||'').toUpperCase(),(o.sector||'PHARMACY').toUpperCase()];
+          STATIC_CLIENTS[idx]=[o.support_name,o.client_name,o.scheduled_date,o.contracted_amount,o.branches||0,(o.location||'').toUpperCase(),(o.sector||'OTHER').toUpperCase()];
         }
       });
     }
@@ -1005,15 +1102,91 @@ async function loadAll(){
     // Process dynamic clients
     dynamicClients=(dynCRes.data||[]).map(r=>[r.support_name,r.client_name,r.scheduled_date,r.contracted_amount,r.branches||0,r.id,(r.location||'').toUpperCase(),(r.sector||'').toUpperCase(),r.active!==false]);
 
+    // Save static data to cache for faster next login
+    if(staticRes.data?.length){
+      saveStaticCache(
+        staticRes.data||[],
+        managersRes.data||[],
+        teamAssignRes.data||[],
+        configRes.data||[]
+      );
+    }
+    isFirstLoad=false;
+    updateLoading('Rendering...',90);
     rebuildClients();
     renderAll();
+    updateLoading('Ready!',100);
+    setTimeout(()=>showLoadingOverlay(false),400);
     setSyncing(false,'✅ Synced — '+new Date().toLocaleTimeString());
-  }catch(e){setSyncing(false,'⚠️ Connection error — '+e.message);console.error(e);}
+  }catch(e){
+    setSyncing(false,'⚠️ Connection error — '+e.message);
+    console.error(e);
+    isFirstLoad=false;
+    showLoadingOverlay(false);
+    showToast('⚠️ Connection error: '+e.message,'error');
+  }
+}
+
+// ── LIGHTWEIGHT POLL ──────────────────────────────────────
+async function loadChangesOnly(){
+  if(isSaving)return;
+  // Skip if user is actively interacting
+  const focused=document.activeElement;
+  if(focused&&(focused.tagName==='INPUT'||focused.tagName==='TEXTAREA'||focused.tagName==='SELECT')){
+    console.log('Poll skipped - user is typing');
+    return;
+  }
+  try{
+    const[depsRes,overridesRes,bonusRes,dynCRes]=await Promise.all([
+      db.from('deployments').select('client_index,status,notes,updated_by,rescheduled_date,photo_url,approval_status,approved_by,client_paid,paid_at,assigned_manager').then(r=>r).catch(()=>({data:[]})),
+      db.from('client_overrides').select('*').then(r=>r).catch(()=>({data:[]})),
+      db.from('manager_bonuses').select('*').order('created_at',{ascending:false}).then(r=>r).catch(()=>({data:[]})),
+      db.from('clients').select('*').order('id').then(r=>r).catch(()=>({data:[]}))
+    ]);
+    (depsRes.data||[]).forEach(r=>{
+      if(r.client_index!==undefined) dbData[r.client_index]={
+        status:r.status||'Pending',notes:r.notes||'',updated_by:r.updated_by||'',
+        rescheduled_date:r.rescheduled_date||'',photo_url:r.photo_url||'',
+        approval_status:r.approval_status||'pending',approved_by:r.approved_by||'',
+        client_paid:r.client_paid===true,paid_at:r.paid_at||null,assigned_manager:r.assigned_manager||''
+      };
+    });
+    overridesData=overridesRes.data||[];
+    overridesData.forEach(ov=>{
+      if(ov.assigned_manager&&ov.client_index!=null){
+        if(!dbData[ov.client_index])dbData[ov.client_index]={};
+        dbData[ov.client_index].assigned_manager=ov.assigned_manager;
+      }
+    });
+    dynamicClients=(dynCRes.data||[]).filter(r=>r.active!==false).map(r=>[
+      r.support_name,r.client_name,r.scheduled_date,r.contracted_amount||0,
+      r.branches||0,(r.location||'').toUpperCase(),(r.sector||'OTHER').toUpperCase()
+    ]);
+    managerBonuses=(bonusRes.data||[]).filter(b=>!b.type||b.type==='manager');
+    supportBonuses=(bonusRes.data||[]).filter(b=>b.type==='support');
+    rebuildClients();
+    renderAll(); // Only renders active tab - fast!
+    if(isCoordinator&&getActiveTab()==='alerts') renderAlerts();
+  }catch(e){console.warn('Poll error:',e.message);}
 }
 
 function rebuildClients(){
   CLIENTS=[...STATIC_CLIENTS,...dynamicClients];
   SUPPORTS=[...new Set(CLIENTS.map(c=>c[0]))].sort();
+  // Populate sector filter dynamically from actual data
+  const secSel=document.getElementById('filterSector');
+  if(secSel){
+    const current=secSel.value;
+    const sectors=[...new Set(CLIENTS.map(c=>c[6]||'').filter(s=>s&&s.trim()))].sort();
+    secSel.innerHTML='<option value="">All Sectors</option>';
+    sectors.forEach(s=>{
+      const o=document.createElement('option');
+      o.value=s;
+      o.textContent=s.charAt(0)+s.slice(1).toLowerCase();
+      secSel.appendChild(o);
+    });
+    if(current) secSel.value=current;
+  }
   // Apply assigned_manager from overrides into dbData
   overridesData.forEach(ov=>{
     if(ov.assigned_manager&&ov.client_index!=null){
@@ -1040,6 +1213,7 @@ function rebuildClients(){
 }
 
 async function saveRow(idx,status,notes){
+  isSaving=true;
   showToast('💾 Saving...','saving');
   try{
     const c=CLIENTS[idx];
@@ -1063,6 +1237,7 @@ async function saveRow(idx,status,notes){
     showToast('✅ Saved!','success');
     renderAll();
   }catch(e){showToast('⚠️ Save failed','error');console.error(e);}
+  finally{setTimeout(()=>{isSaving=false;},3000);} // Resume poll after 3s
 }
 
 // ── USER MANAGEMENT ────────────────────────────────────────
@@ -1083,8 +1258,11 @@ async function doLoginFromDB(){
   currentUser=name;
   isCoordinator=(user.role==='coordinator');
   currentRole=user.role||'support';
+  // Hide login, show app INSTANTLY
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('mainApp').style.display='block';
+  showLoadingOverlay(true);
+  updateLoading('Loading your data...',10);
   document.getElementById('headerUser').textContent=isCoordinator?'👑 Coordinator':currentUser;
   if(isCoordinator){
     document.getElementById('coordinatorBanner').style.display='flex';
@@ -1122,6 +1300,7 @@ async function doLoginFromDB(){
     // COORDINATOR: show Finance, Admin and Managers, hide support bell
     document.getElementById('adminTabBtn').style.display='inline';
     document.getElementById('financeTabBtn').style.display='inline';
+    const excelBtn=document.getElementById('exportExcelBtn');if(excelBtn)excelBtn.style.display='inline';
     document.getElementById('managerTabBtn').style.display='inline';
     document.getElementById('managerTabBtn').textContent='👔 Managers';
     document.getElementById('managerTabBtn').onclick=function(){switchTab('managers');};
@@ -1134,7 +1313,7 @@ async function doLoginFromDB(){
   // ── THEN load live DB data in background (non-blocking) ──
   setSyncing(true);
   loadAll().then(()=>{
-    pollTimer=setInterval(loadAll,20000);
+    pollTimer=setInterval(loadAll,60000);
     // Always refresh manager data after load
     if(isCoordinator){
       // Re-fetch bonuses before rendering managers dashboard
@@ -1166,6 +1345,9 @@ function renderSupportAlerts(){
     const row=dbData[i]||{};
     return (row.status==='Done'||row.status==='Refused')&&row.approval_status==='needs_approval';
   });
+  // Support bonus notifications
+  const myApprovedBonuses=supportBonuses.filter(b=>b.manager_name===currentUser&&b.status==='approved');
+  const myRejectedBonuses=supportBonuses.filter(b=>b.manager_name===currentUser&&b.status==='rejected');
   const myRejected=CLIENTS.map((c,i)=>({c,i})).filter(({c,i})=>{
     if(c[0]!==currentUser)return false;
     const row=dbData[i]||{};
@@ -1183,12 +1365,26 @@ function renderSupportAlerts(){
     if(pb.length>0){mgrHtml+=`<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:10px 14px;margin-bottom:8px"><div style="font-weight:600;color:#2E7D32;margin-bottom:4px">💰 Big Client Paid (${pb.length})</div>${pb.map(({c})=>`<div style="font-size:13px">${c[1]} — 250,000 RWF ✅</div>`).join('')}</div>`;}
     if(ub.length>0){mgrHtml+=`<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 14px;margin-bottom:8px"><div style="font-weight:600;color:#E65100;margin-bottom:4px">⏳ Big Client Payment Pending (${ub.length})</div>${ub.map(({c})=>`<div style="font-size:13px">${c[1]} — 250,000 RWF ⏳</div>`).join('')}</div>`;}
   }
-  const total=myPending.length+myRejected.length+mgrCount;
+  const total=myPending.length+myRejected.length+mgrCount+myApprovedBonuses.length+myRejectedBonuses.length;
   const badge=document.getElementById('supportNotifBadge');
   if(badge){badge.textContent=total;badge.style.display=total>0?'flex':'none';}
   const listEl=document.getElementById('supportPendingList');
   if(!listEl)return;
-  let html=mgrHtml;
+  // Support bonus notifications
+  let bonusNotifHtml='';
+  if(myApprovedBonuses.length>0){
+    bonusNotifHtml+=`<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+      <div style="font-weight:600;color:#2E7D32;margin-bottom:4px">✅ Bonus Request Approved (${myApprovedBonuses.length})</div>
+      ${myApprovedBonuses.map(b=>`<div style="font-size:13px"><strong>${b.period||'—'}</strong> — Approved: <span style="color:#2E7D32;font-weight:700">${(b.approved_amount||0).toLocaleString()} RWF</span>${b.approval_comment?`<div style="font-size:11px;font-style:italic">CEO: "${b.approval_comment}"</div>`:''}</div>`).join('')}
+    </div>`;
+  }
+  if(myRejectedBonuses.length>0){
+    bonusNotifHtml+=`<div style="background:#FFEBEE;border:1px solid #EF9A9A;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+      <div style="font-weight:600;color:#C62828;margin-bottom:4px">❌ Bonus Request Rejected (${myRejectedBonuses.length})</div>
+      ${myRejectedBonuses.map(b=>`<div style="font-size:13px">${b.period||'—'} — Requested: ${(b.requested_amount||0).toLocaleString()} RWF${b.approval_comment?`<div style="font-size:11px;color:#C62828;font-style:italic">CEO: "${b.approval_comment}"</div>`:''}</div>`).join('')}
+    </div>`;
+  }
+  let html=mgrHtml+bonusNotifHtml;
   if(myPending.length>0){
     html+=`<div style="font-weight:600;color:#E65100;margin-bottom:4px">⏳ Awaiting approval (${myPending.length}):</div>`;
     myPending.forEach(({c,i})=>{const row=dbData[i]||{};html+='<div style="padding:8px 12px;background:white;border-radius:6px;border:1px solid #FFD54F;margin-bottom:6px;font-size:13px"><strong>'+c[1]+'</strong> — '+row.status+'<div style="font-size:11px;color:#888;margin-top:3px">⏳ Waiting approval</div>'+(row.notes?'<div style="font-size:11px;color:#555;font-style:italic">"'+row.notes+'"</div>':'')+'</div>';});
@@ -1338,7 +1534,7 @@ async function addClient(){
   document.getElementById('nc_branches').value='0';
   document.getElementById('pickPreview').textContent='0';
   showToast('✅ Client added!','success');
-  await loadAll();
+  await loadChangesOnly();
   setTimeout(()=>closeModal('addClientModal'),1500);
 }
 
@@ -1360,23 +1556,103 @@ function isLocked(d){return !isCoordinator&&d<today();}
 function canEdit(i){
   if(isCoordinator)return true;
   const c=CLIENTS[i];
-  // Manager can edit their team's clients
   if(currentRole==='manager'){
     const team=getManagerTeam(currentUser);
     return team.includes(c[0]);
   }
-  if(c[0]!==currentUser)return false;
+  if((c[0]||'').toLowerCase()!==currentUser.toLowerCase())return false;
   return !isLocked(c[2]);
 }
 
+function canEditDate(i){
+  if(isCoordinator)return true;
+  const c=CLIENTS[i];
+  // Manager can always edit team clients dates
+  if(currentRole==='manager'){
+    const team=getManagerTeam(currentUser);
+    return team.includes(c[0]);
+  }
+  // Support agent — only if date edit window is open
+  if(currentRole==='support'){
+    // Case-insensitive name match
+    if((c[0]||'').toLowerCase()!==currentUser.toLowerCase())return false;
+    if(!dateEditWindow.open)return false;
+    // Check if within window time
+    const now=new Date().toISOString().substring(0,10);
+    if(dateEditWindow.from&&now<dateEditWindow.from)return false;
+    if(dateEditWindow.to&&now>dateEditWindow.to)return false;
+    return true;
+  }
+  return false;
+}
+
 // ── RENDER ─────────────────────────────────────────────────
+
+// ── PERIOD SYNC FUNCTIONS ──────────────────────────────────
+function syncAllPeriodInputs(from,to){
+  ['agentsDateFrom','myteamDateFrom','managerDateFrom','finDateFrom'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value=from||'';
+  });
+  ['agentsDateTo','myteamDateTo','managerDateTo','finDateTo'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value=to||'';
+  });
+}
+function syncPeriodFromAgents(){
+  const from=document.getElementById('agentsDateFrom')?.value||'';
+  const to=document.getElementById('agentsDateTo')?.value||'';
+  syncAllPeriodInputs(from,to);renderAgents();
+}
+function syncPeriodFromManagers(){
+  const from=document.getElementById('managerDateFrom')?.value||'';
+  const to=document.getElementById('managerDateTo')?.value||'';
+  syncAllPeriodInputs(from,to);renderManagersDashboard();renderManagerFinanceTable();
+}
+function syncPeriodFromMyTeam(){
+  const from=document.getElementById('myteamDateFrom')?.value||'';
+  const to=document.getElementById('myteamDateTo')?.value||'';
+  syncAllPeriodInputs(from,to);renderMyTeam();
+}
+function syncFinancePeriodToOtherTabs(){
+  const from=document.getElementById('finDateFrom')?.value||'';
+  const to=document.getElementById('finDateTo')?.value||'';
+  syncAllPeriodInputs(from,to);
+}
+function clearAgentsPeriod(){syncAllPeriodInputs('','');renderAgents();}
+function clearManagersPeriod(){syncAllPeriodInputs('','');renderManagersDashboard();renderManagerFinanceTable();}
+function clearMyTeamPeriod(){syncAllPeriodInputs('','');renderMyTeam();}
+
+function filterByStatus(status){
+  switchTab('monitor');
+  setTimeout(function(){
+    const sel=document.getElementById('filterStatus');
+    if(sel){
+      sel.value=status;
+      monitorCurrentPage=1;
+      renderTable();
+      renderMobileCards();
+    }
+  },100);
+}
+
+function getActiveTab(){
+  const tabs=['monitor','agents','finance','admin','managers','myteam','alerts'];
+  for(const t of tabs){
+    const el=document.getElementById('tab-'+t);
+    if(el&&el.style.display!=='none'&&el.style.display!=='')return t;
+  }
+  return 'monitor';
+}
+
 function renderAll(){
-  monitorCurrentPage=1;mobileCurrentPage=1;
-  renderStats();renderTable();renderMobileCards();renderAgents();
-  const adminTab=document.getElementById('tab-admin');
-  if(adminTab&&adminTab.style.display==='block'){renderAdminClients();renderAdminUsers();}
-  const finTab=document.getElementById('tab-finance');
-  if(finTab&&finTab.style.display==='block')renderFinance();
+  renderStats(); // always fast
+  const active=getActiveTab();
+  if(active==='monitor'){renderTable();renderMobileCards();}
+  else if(active==='agents') renderAgents();
+  else if(active==='finance') renderFinance();
+  else if(active==='admin'){renderAdminClients();renderAdminUsers();}
+  else if(active==='managers') renderManagersDashboard();
+  else if(active==='myteam') renderMyTeam();
+  else if(active==='alerts') renderAlerts();
   if(isCoordinator){
     renderAlerts();
     // Show quick action bar if there are pending approvals
@@ -1478,7 +1754,7 @@ function renderMobileCards(){
         ${noteEditBtn}
         ${photoBtn}
         ${photoView}
-        ${(isCoordinator||(currentRole==='manager'&&getManagerTeam(currentUser).includes(c[0])))&&!rd?`<button onclick="openRescheduleEdit(${i})" style="font-size:11px;background:#E3F2FD;color:#1565C0;border:1px solid #90CAF9;border-radius:4px;padding:2px 7px;cursor:pointer">📅 Date</button>`:''}
+        ${canEditDate(i)&&!rd?`<button onclick="openRescheduleEdit(${i})" style="font-size:11px;background:#E3F2FD;color:#1565C0;border:1px solid #90CAF9;border-radius:4px;padding:2px 7px;cursor:pointer">📅 Set Date</button>`:''}
         ${(isCoordinator||(currentRole==='manager'&&getManagerTeam(currentUser).includes(c[0])))&&rd?`<button onclick="openRescheduleEdit(${i})" style="font-size:11px;background:#FFF3E0;color:#E65100;border:1px solid #FFCC80;border-radius:4px;padding:2px 7px;cursor:pointer">✏️ Date</button>`:''}
       </div>
     </div>`;
@@ -1537,7 +1813,20 @@ function getFiltered(){
     return true;
   });
 }
+function updateHomeSubtitle(){
+  const el=document.getElementById('homeSubtitle');
+  if(!el)return;
+  const total=CLIENTS.length;
+  const done=CLIENTS.filter((_,i)=>(dbData[i]||{}).status==='Done').length;
+  const pending=CLIENTS.filter((_,i)=>{
+    const st=(dbData[i]||{}).status||'Pending';
+    return ['Pending','Email Sent','Convincing','Rescheduled'].includes(st);
+  }).length;
+  el.textContent=total+' clients total · '+done+' done · '+pending+' pending';
+}
+
 function renderStats(){
+  updateHomeSubtitle();
   // Stats always show ALL clients for coordinator, filtered for support
   const allIds=isCoordinator?CLIENTS.map((_,i)=>i):
     currentRole==='manager'?CLIENTS.map((c,i)=>({c,i})).filter(({c})=>getManagerTeam(currentUser).includes(c[0])).map(({i})=>i):
@@ -1553,13 +1842,43 @@ function renderStats(){
   const pending=total-done-refused-emailSent-rescheduled-convincing;
   const pct=total>0?Math.round((done/total)*100):0;
   document.getElementById('statsRow').innerHTML=`
-    <div class="stat-card"><div class="label">Total Clients</div><div class="value" style="color:#003366">${total}</div><div class="sub">${dateFrom||dateTo?'in date range':'pharmacy clients'}</div></div>
-    <div class="stat-card"><div class="label">⏳ Pending</div><div class="value" style="color:#555">${pending}</div><div class="sub">not started</div></div>
-    <div class="stat-card"><div class="label">✅ Done</div><div class="value" style="color:#2E7D32">${done}</div><div class="sub">${pct}% complete</div><div class="pbar-wrap"><div class="pbar" style="width:${pct}%"></div></div></div>
-    <div class="stat-card"><div class="label">📧 Email Sent</div><div class="value" style="color:#1565C0">${emailSent}</div><div class="sub">awaiting update</div></div>
-    <div class="stat-card"><div class="label">🟣 Convincing</div><div class="value" style="color:#6A1B9A">${convincing}</div><div class="sub">in progress</div></div>
-    <div class="stat-card"><div class="label">🔄 Rescheduled</div><div class="value" style="color:#E65100">${rescheduled}</div><div class="sub">date changed</div></div>
-    <div class="stat-card"><div class="label">❌ Refused (visited)</div><div class="value" style="color:#C62828">${refused}</div><div class="sub">needs approval</div></div>`;
+    <div class="stat-card" style="cursor:pointer" onclick="filterByStatus('')">
+      <div class="label">Total Clients</div>
+      <div class="value" style="color:#003366">${total}</div>
+      <div class="sub">${dateFrom||dateTo?'in date range':'clients'}</div>
+    </div>
+    <div class="stat-card" style="cursor:pointer" onclick="filterByStatus('Pending')">
+      <div class="label">⏳ Pending</div>
+      <div class="value" style="color:#555">${pending}</div>
+      <div class="sub">not started</div>
+    </div>
+    <div class="stat-card" style="cursor:pointer" onclick="filterByStatus('Done')">
+      <div class="label">✅ Done</div>
+      <div class="value" style="color:#2E7D32">${done}</div>
+      <div class="sub">${pct}% complete</div>
+      <div class="pbar-wrap"><div class="pbar" style="width:${pct}%"></div></div>
+    </div>
+    <div class="stat-card" style="cursor:pointer" onclick="filterByStatus('Email Sent')">
+      <div class="label">📧 Email Sent</div>
+      <div class="value" style="color:#1565C0">${emailSent}</div>
+      <div class="sub">awaiting update</div>
+    </div>
+    <div class="stat-card" style="cursor:pointer" onclick="filterByStatus('Convincing')">
+      <div class="label">🟣 Convincing</div>
+      <div class="value" style="color:#6A1B9A">${convincing}</div>
+      <div class="sub">in progress</div>
+    </div>
+    <div class="stat-card" style="cursor:pointer" onclick="filterByStatus('Rescheduled')">
+      <div class="label">🔄 Rescheduled</div>
+      <div class="value" style="color:#E65100">${rescheduled}</div>
+      <div class="sub">date changed</div>
+    </div>
+    <div class="stat-card" style="cursor:pointer" onclick="filterByStatus('Refused')">
+      <div class="label">❌ Refused (visited)</div>
+      <div class="value" style="color:#C62828">${refused}</div>
+      <div class="sub">needs approval</div>
+    </div>
+  `
   if(isCoordinator){
     renderAlerts();
     // Show quick action bar if there are pending approvals
@@ -1597,8 +1916,8 @@ function branchBadge(b){if(b===0)return'<span class="branch-badge branch-0">—<
 function buildDateCell(i,c){
   const row=dbData[i]||{};
   const rd=row.rescheduled_date||'';
-  // Only coordinator can change the date
-  if(isCoordinator){
+  // Coordinator, manager (team clients), and support agent (own clients) can change date
+  if(canEditDate(i)){
     if(editingReschedule===i){
       return `<input class="date-input-inline" id="rd_${i}" type="date" value="${rd||c[2]}" min="2026-05-21" max="2026-07-31"
         onblur="commitReschedule(${i})" onkeydown="if(event.key==='Enter')commitReschedule(${i});if(event.key==='Escape'){editingReschedule=null;renderTable();}">`;
@@ -1693,7 +2012,7 @@ function goUsersPage(p){usersCurrentPage=p;renderAdminUsers();}
 async function saveLocationSector(idx,location,sector){
   const c=CLIENTS[idx];
   const newLoc=location!==null?location.toUpperCase():c[5]||'—';
-  const newSec=sector!==null?sector:c[6]||'PHARMACY';
+  const newSec=sector!==null?sector:c[6]||'—';
   // Save to client_overrides
   const payload={
     client_index:idx,
@@ -1759,15 +2078,40 @@ function commitReschedule(idx){
   else renderTable();
 }
 
+function buildSupportBonusForm(sup){
+  const sk=sup.replace(/ /g,'__');
+  return '<div style="background:#f8f9fa;border-radius:8px;padding:10px;margin-top:4px">'
+    +'<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">📅 From</label>'
+    +'<input type="date" id="sbpf_'+sk+'" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1.5px solid #ddd;font-size:13px"></div>'
+    +'<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">📅 To</label>'
+    +'<input type="date" id="sbpt_'+sk+'" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1.5px solid #ddd;font-size:13px"></div>'
+    +'<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px">💰 Amount (RWF)</label>'
+    +'<input type="number" id="sba_'+sk+'" placeholder="e.g. 50000" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:6px;border:2px solid #1565C0;font-size:16px;color:#003366;background:white"></div>'
+    +'<textarea id="sbc_'+sk+'" placeholder="Justify your request..." style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1.5px solid #ddd;font-size:13px;height:70px;resize:none"></textarea>'
+    +'<button onclick="submitSupportBonus(\''+sk+'\')" style="margin-top:8px;width:100%;padding:10px;border-radius:6px;border:none;background:#003366;color:white;cursor:pointer;font-size:13px;font-weight:600">📤 Submit Request</button>'
+    +'</div>';
+}
+
 function renderAgents(){
-  let html='';
+  try{
+  const{from:agFrom,to:agTo}=getFinDateRange();
+  const agWarnEl=document.getElementById('agentNoPeriodWarn');
+  if(agWarnEl) agWarnEl.style.display=(!agFrom&&!agTo)?'flex':'none';
+  let html=(!agFrom&&!agTo)?'<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px"><span style="font-size:18px">⚠️</span><div><div style="font-size:13px;font-weight:600;color:#E65100">No period selected — showing all time</div><div style="font-size:12px;color:#888">Select a date range above to filter by period</div></div></div>':'';
   // Support agents only see their own card
   const visibleSupports=isCoordinator?SUPPORTS:
     currentRole==='manager'?getManagerTeam(currentUser):
     SUPPORTS.filter(s=>s===currentUser);
   visibleSupports.forEach(sup=>{
-    const cl=CLIENTS.map((c,i)=>({c,i})).filter(({c})=>c[0]===sup);
-    const inRange=cl.filter(({c})=>inDateRange(c[2]));
+    const cl=CLIENTS.map((c,i)=>({c,i})).filter(({c})=>c&&c[0]===sup);
+    // Use Finance date range if set, else use client monitor date range
+    const{from:finFrom,to:finTo}=getFinDateRange();
+    const inRange=cl.filter(({c,i})=>{
+      const schedDate=(dbData[i]||{}).rescheduled_date||c[2];
+      if(finFrom&&schedDate<finFrom)return false;
+      if(finTo&&schedDate>finTo)return false;
+      return true;
+    });
     const d=inRange.filter(({i})=>(dbData[i]||{}).status==='Done').length;
     const r=inRange.filter(({i})=>(dbData[i]||{}).status==='Refused').length;
     const earned=inRange.filter(({i})=>{
@@ -1785,7 +2129,16 @@ function renderAgents(){
       const ap=(dbData[i]||{}).approval_status;
       return (st==='Done'||st==='Refused')&&ap==='approved'&&(dbData[i]||{}).client_paid===true;
     }).reduce((a,{c})=>a+Math.round(c[3]*0.1),0);
-    const payStatus=paymentStatus[sup]||'unpaid';
+    // Calculate payment status from client_paid flags (same as Finance tab)
+    const paidClients=inRange.filter(({i})=>{
+      const row=dbData[i]||{};
+      return (row.status==='Done'||row.status==='Refused')&&row.approval_status==='approved'&&row.client_paid===true;
+    }).length;
+    const approvedClients=inRange.filter(({i})=>{
+      const row=dbData[i]||{};
+      return (row.status==='Done'||row.status==='Refused')&&row.approval_status==='approved';
+    }).length;
+    const payStatus=approvedClients===0?'unpaid':paidClients===0?'unpaid':paidClients===approvedClients?'paid':'partial';
     const wb=inRange.filter(({c})=>c[4]>0).length;
     const tot=inRange.length;
     const pct=tot>0?Math.round((d/tot)*100):0;
@@ -1816,16 +2169,64 @@ function renderAgents(){
           <span style="color:#C62828;font-weight:700">${(earned-paidToAgent).toLocaleString()} RWF</span>
         </div>
       </div>`:''}
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:12px;color:#555">💰 Payment status:</div>
-        <span style="font-size:12px;font-weight:600;padding:3px 12px;border-radius:20px;
-          ${payStatus==='paid'?'background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7':
-            payStatus==='partial'?'background:#FFF8E1;color:#E65100;border:1px solid #FFD54F':
-            earned>0?'background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A':
-            'background:#F5F5F5;color:#aaa;border:1px solid #e0e0e0'}">
-          ${payStatus==='paid'?'✅ Paid':payStatus==='partial'?'⚡ Partially Paid':earned>0?'❌ Not Yet Paid':'— No earnings yet'}
-        </span>
-      </div>
+      ${(()=>{
+        // Calculate CEO bonus for this agent in selected period
+        const{from:cbFrom,to:cbTo}=getFinDateRange();
+        const agentBonus=supportBonuses.filter(b=>{
+          if(b.manager_name!==sup||b.status!=='approved')return false;
+          if(!cbFrom&&!cbTo)return true;
+          const d=b.approved_at?b.approved_at.substring(0,10):'';
+          return(!cbFrom||d>=cbFrom)&&(!cbTo||d<=cbTo);
+        }).reduce((a,b)=>a+(b.approved_amount||0),0);
+        const totalPay=earned+agentBonus;
+        return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div style="font-size:12px;color:#555">💰 10% Earnings:</div>
+            <span style="font-size:13px;font-weight:600;color:#003366">${earned.toLocaleString()} RWF</span>
+          </div>
+          ${agentBonus>0?`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div style="font-size:12px;color:#555">✅ CEO Bonus:</div>
+            <span style="font-size:13px;font-weight:600;color:#2E7D32">+${agentBonus.toLocaleString()} RWF</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;background:#E8F5E9;border-radius:6px;padding:4px 8px">
+            <div style="font-size:12px;font-weight:600;color:#2E7D32">💵 Total to Receive:</div>
+            <span style="font-size:14px;font-weight:700;color:#2E7D32">${totalPay.toLocaleString()} RWF</span>
+          </div>`:''}
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:12px;color:#555">Payment status:</div>
+            <span style="font-size:12px;font-weight:600;padding:3px 12px;border-radius:20px;
+              ${payStatus==='paid'?'background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7':
+                payStatus==='partial'?'background:#FFF8E1;color:#E65100;border:1px solid #FFD54F':
+                earned>0?'background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A':
+                'background:#F5F5F5;color:#aaa;border:1px solid #e0e0e0'}">
+              ${payStatus==='paid'?'✅ Paid':payStatus==='partial'?'⚡ Partially Paid':earned>0?'❌ Not Yet Paid':'— No earnings yet'}
+            </span>
+          </div>
+        </div>`;
+      })()}
+      ${!isCoordinator&&currentRole!=='manager'?`
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0">
+        <button onclick="toggleSupportBonusForm('sbf_${sup.replace(/ /g,'__')}')" style="width:100%;padding:7px;background:#f0f4f8;border:0.5px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px;color:#555;text-align:left">
+          📤 Request Bonus / Raise Issue ▼
+        </button>
+        <div id="sbf_${sup.replace(/ /g,'__')}" style="display:none;margin-top:8px">
+          ${(()=>{
+            const myBonuses=supportBonuses.filter(b=>b.manager_name===sup);
+            const pendingBonus=myBonuses.find(b=>b.status==='pending');
+            if(pendingBonus){
+              return '<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:6px;padding:8px 10px;font-size:12px"><div style="font-weight:600;color:#E65100">⏳ Request Pending</div><div style="color:#555;margin-top:2px">Period: '+pendingBonus.period+' — Amount: '+(pendingBonus.requested_amount||0).toLocaleString()+' RWF</div><div style="font-style:italic;color:#666;margin-top:2px">&quot;'+pendingBonus.request_comment+'&quot;</div></div>';
+            }
+            return buildSupportBonusForm(sup);
+          })()}
+          <!-- Past requests -->
+          ${supportBonuses.filter(b=>b.manager_name===sup&&b.status!=='pending').map(b=>`
+            <div style="margin-top:6px;padding:6px 10px;border-radius:6px;border:1px solid ${b.status==='approved'?'#A5D6A7':'#EF9A9A'};background:${b.status==='approved'?'#E8F5E9':'#FFEBEE'};font-size:12px">
+              <div style="font-weight:600;color:${b.status==='approved'?'#2E7D32':'#C62828'}">${b.status==='approved'?'✅ Approved':'❌ Rejected'} — ${b.period||'—'}</div>
+              ${b.approved_amount?'<div>Amount: '+b.approved_amount.toLocaleString()+' RWF</div>':''} 
+              ${b.approval_comment?'<div style="font-style:italic">CEO: &quot;'+b.approval_comment+'&quot;</div>':''} 
+            </div>`).join('')}
+        </div>
+      </div>`:''}
       ${earned>0&&!isCoordinator?`
       <div style="margin-top:8px">
         <button onclick="toggleSupportClientList('scl_${sup.replace(/ /g,'__')}')" style="width:100%;padding:7px 10px;background:#f0f4f8;border:0.5px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px;color:#555;text-align:left;margin-bottom:4px">
@@ -1853,12 +2254,37 @@ function renderAgents(){
   document.getElementById('agentGrid').innerHTML=html;
   // Update support alert badge
   if(!isCoordinator) renderSupportAlerts();
+  }catch(e){console.warn('renderAgents error:',e.message);}
 }
+function showLoadingOverlay(show){
+  const el=document.getElementById('loadingOverlay');
+  if(el) el.style.display=show?'flex':'none';
+}
+function updateLoading(step,pct){
+  const s=document.getElementById('loadingStep');
+  const b=document.getElementById('loadingBar');
+  const p=document.getElementById('loadingPct');
+  if(s) s.textContent=step;
+  if(b) b.style.width=pct+'%';
+  if(p) p.textContent=pct+'%';
+}
+
 function setSyncing(on,msg){
-  const dot=document.getElementById('syncDot');const msgEl=document.getElementById('syncMsg');
+  const dot=document.getElementById('syncDot');
+  const msgEl=document.getElementById('syncMsg');
   if(!dot)return;
-  if(on){dot.classList.add('syncing');if(msgEl)msgEl.textContent='Syncing...';}
-  else{dot.classList.remove('syncing');if(msgEl&&msg)msgEl.textContent=msg;}
+  if(on){
+    dot.style.background='#FFA000';
+    dot.title='Syncing...';
+    // Silent sync - no text change to avoid distraction
+  } else {
+    dot.style.background='#4CAF50';
+    dot.title='Synced';
+    if(msgEl){
+      const now=new Date();
+      msgEl.textContent='✅ Synced — '+now.toLocaleTimeString();
+    }
+  }
 }
 let toastTimer=null;
 function showToast(msg,type){
@@ -1901,6 +2327,27 @@ function switchTab(t){
     renderAccessControlUI();
   }
   if(t==='finance')renderFinance();
+  if(t==='agents'){
+    // Sync period and render
+    const{from,to}=getFinDateRange();
+    const af=document.getElementById('agentsDateFrom');
+    const at=document.getElementById('agentsDateTo');
+    if(af&&!af.value&&from) af.value=from;
+    if(at&&!at.value&&to) at.value=to;
+    // Fetch fresh payment status then render
+    db.from('deployments').select('client_index,client_paid,paid_at,status,approval_status')
+      .then(r=>{
+        (r.data||[]).forEach(row=>{
+          if(row.client_index!==undefined){
+            if(!dbData[row.client_index]) dbData[row.client_index]={};
+            dbData[row.client_index].client_paid=row.client_paid===true;
+            dbData[row.client_index].status=row.status||'Pending';
+            dbData[row.client_index].approval_status=row.approval_status||'pending';
+          }
+        });
+        renderAgents();
+      }).catch(()=>renderAgents());
+  }
   if(t==='managers'||(isCoordinator&&document.getElementById('tab-managers')?.style.display==='block')){
     // Always fetch fresh bonuses then render
     db.from('manager_bonuses').select('*').order('created_at',{ascending:false})
@@ -2085,7 +2532,7 @@ async function bulkActivate(active){
   if(error){showToast('⚠️ Failed: '+error.message,'error');return;}
   showToast(`✅ ${dynSelected.length} clients ${action}d!`,'success');
   selectedClients.clear();
-  await loadAll();
+  await loadChangesOnly();
   renderAdminClients();
 }
 
@@ -2135,6 +2582,11 @@ function openEditClient(idx){
   openModal('editClientModal');
 }
 document.addEventListener('DOMContentLoaded',()=>{
+  // Pre-warm Supabase connection silently
+  db.from('users').select('count').limit(1).then(()=>{}).catch(()=>{});
+  // Show login form and load dropdown
+  document.getElementById('loginScreen').style.display='flex';
+  loadLoginDropdown();
   const a=document.getElementById('ec_amount');
   if(a)a.addEventListener('input',()=>{
     const v=parseInt(a.value)||0;
@@ -2197,7 +2649,7 @@ async function saveEditClient(){
   }
   showToast('✅ Client updated!','success');
   closeModal('editClientModal');
-  await loadAll();
+  await loadChangesOnly();
   renderAdminClients();
 }
 
@@ -2213,7 +2665,7 @@ This will remove the client and all its status data. This cannot be undone.`))re
     await db.from('clients').delete().eq('id',c[5]);
   }
   showToast('Client deleted','success');
-  await loadAll();
+  await loadChangesOnly();
   renderAdminClients();
 }
 
@@ -2277,8 +2729,8 @@ async function uploadPhoto(idx, input){
 // ── EXCEL IMPORT ──────────────────────────────────────────
 function downloadTemplate(){
   const csv=`support_name,client_name,scheduled_date,contracted_amount,branches,location,sector
-TUYISHIME Olivier,EXAMPLE PHARMACY LTD,2026-06-10,35000,0,KIMIRONKO,PHARMACY
-jean claude bikorimana,SAMPLE PHARMACY,2026-06-15,60000,2,MUSANZE,PHARMACY`;
+TUYISHIME Olivier,EXAMPLE CLIENT LTD,2026-06-10,35000,0,KIMIRONKO,PHARMACY
+jean claude bikorimana,SAMPLE CLINIC,2026-06-15,60000,2,MUSANZE,CLINIC`;
   const blob=new Blob([csv],{type:'text/csv'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
@@ -2300,22 +2752,43 @@ async function importExcel(input){
     const obj={};
     headers.forEach((h,j)=>obj[h]=vals[j]||'');
     if(obj.client_name&&obj.support_name&&obj.scheduled_date){
+      // Fix date: 01/07/2026 or 07/01/2026 → 2026-07-01
+      let rawDate=(obj.scheduled_date||'').trim();
+      let fixedDate=rawDate;
+      if(rawDate.includes('/')){
+        const parts=rawDate.split('/');
+        if(parts.length===3){
+          // DD/MM/YYYY format
+          fixedDate=parts[2]+'-'+parts[1].padStart(2,'0')+'-'+parts[0].padStart(2,'0');
+        }
+      } else if(rawDate.includes('-')&&rawDate.length===10){
+        fixedDate=rawDate; // already YYYY-MM-DD
+      }
+      // Fix amount: 'RWF 55,000' or '55,000' → 55000
+      const rawAmt=(obj.contracted_amount||'0').toString().replace(/RWF/gi,'').replace(/,/g,'').replace(/\s/g,'').trim();
+      const fixedAmt=parseInt(rawAmt)||0;
+      // Normalize support name — match to known SUPPORTS list
+      const rawSup=(obj.support_name||'').trim();
+      const matchedSup=SUPPORTS.find(s=>s.toLowerCase()===rawSup.toLowerCase())||rawSup;
       rows.push({
-        support_name:obj.support_name,client_name:obj.client_name,
-        scheduled_date:obj.scheduled_date,contracted_amount:parseInt(obj.contracted_amount)||35000,
-        branches:parseInt(obj.branches)||0,
+        support_name:matchedSup,
+        client_name:obj.client_name,
+        scheduled_date:fixedDate,
+        contracted_amount:fixedAmt,
+        branches:parseInt((obj.branches||'0').toString().replace(/\s/g,''))||0,
         location:(obj.location||'').toUpperCase(),
-        sector:(obj.sector||'PHARMACY').toUpperCase()
+        sector:(obj.sector||'OTHER').toUpperCase()
       });
     }
   }
   if(!rows.length){showToast('⚠️ No valid rows found','error');return;}
   showToast(`📤 Importing ${rows.length} clients...`,'saving');
-  const{error}=await db.from('clients').insert(rows);
+  const{error}=await db.from('static_clients').insert(rows);
   if(error){showToast('⚠️ Import failed: '+error.message,'error');return;}
-  showToast(`✅ ${rows.length} clients imported!`,'success');
+  showToast(`✅ ${rows.length} clients imported! Refresh to see them.`,'success');
   input.value='';
-  await loadAll();
+  clearStaticCache(); // Clear cache so new clients load
+  await loadAllFull();
   renderAdminClients();
 }
 
@@ -2411,6 +2884,7 @@ function renderAlerts(){
 
   // ④ Today's clients still Pending
   const todayPending=CLIENTS.map((c,i)=>({c,i})).filter(({c,i})=>{
+    if(!c||!c[0])return false;
     const row=dbData[i]||{};
     const st=row.status||'Pending';
     const rd=row.rescheduled_date||'';
@@ -2674,6 +3148,7 @@ function renderAlerts(){
 }
 
 async function approveClient(idx){
+  isSaving=true;
   showToast('✅ Approving...','saving');
   const row=dbData[idx]||{};
   const c=CLIENTS[idx];
@@ -2691,6 +3166,7 @@ async function approveClient(idx){
 }
 
 async function rejectClient(idx){
+  isSaving=true;
   const reason=prompt('Reason for rejection (support will see this in notes):');
   if(reason===null)return;
   showToast('Rejecting...','saving');
@@ -2859,6 +3335,7 @@ function getFinanceData(){
 }
 
 function renderFinance(){
+  syncFinancePeriodToOtherTabs(); // Sync period to all other tabs
   const{from,to}=getFinDateRange();
   // Update period summary badge
   const sumEl=document.getElementById('finPeriodSummary');
@@ -2888,6 +3365,7 @@ function renderFinance(){
   // Summary cards
   // ── Support team calculations ─────────────────────────
   const approvedCount=data.reduce((a,d)=>a+d.doneApproved+d.refusedApproved,0);
+  const totalCeoBonus=data.reduce((a,d)=>a+(d.ceoBonus||0),0);
   const pendingApprovalCount=data.reduce((a,d)=>a+d.doneUnApproved+d.refusedUnApproved,0);
   const totalDoneCount=data.reduce((a,d)=>a+d.done,0);
   const totalRefusedCount=data.reduce((a,d)=>a+d.refused,0);
@@ -2897,7 +3375,7 @@ function renderFinance(){
 
   // ── Manager summary calculations ─────────────────────
   const managers=Object.keys(MANAGER_INFO);
-  let mgrTotalToPay=0,mgrTotalBase=0,mgrBigClientTotal=0,mgrApprovedBonus=0,mgrTotalPaid=0;
+  let mgrTotalToPay=0,mgrTotalBase=0,mgrBigClientTotal=0,mgrApprovedBonus=0,mgrTotalPaid=0,mgrSupportBonus=0;
   managers.forEach(mgr=>{
     const stats=getManagerClientStats(mgr);
     // Filter approved bonuses by selected period
@@ -2916,6 +3394,16 @@ function renderFinance(){
     const proratedBase=getProratedBase();
     const total=proratedBase+stats.bigClientEarned+approvedBonusAmt;
     mgrTotalToPay+=total;
+    // Support bonuses in this period
+    const supPeriodApproved=supportBonuses.filter(b=>{
+      if(b.status!=='approved')return false;
+      if(!finFrom&&!finTo)return true;
+      const approvedDate=b.approved_at?b.approved_at.substring(0,10):'';
+      if(finFrom&&approvedDate&&approvedDate<finFrom)return false;
+      if(finTo&&approvedDate&&approvedDate>finTo)return false;
+      return true;
+    });
+    mgrSupportBonus+=(supPeriodApproved||[]).reduce((a,b)=>a+(b.approved_amount||0),0);
     mgrTotalBase+=proratedBase;
     mgrBigClientTotal+=stats.bigClientEarned;
     mgrApprovedBonus+=approvedBonusAmt;
@@ -2924,15 +3412,21 @@ function renderFinance(){
     const basePaid2=paymentStatus['mgr_base_'+mgrKey2]==='paid'?proratedBase:0;
     const bigPaid2=paymentStatus['mgr_big_'+mgrKey2]==='paid'?stats.bigClientEarned:0;
     const bonusPaid2=paymentStatus['mgr_bonus_'+mgrKey2]==='paid'?approvedBonusAmt:0;
-    mgrTotalPaid+=basePaid2+bigPaid2+bonusPaid2;
+    const perfPaid2=paymentStatus['mgr_perf_'+mgrKey2]==='paid'?getManagerPerformancePay(mgr).earned:0;
+    mgrTotalPaid+=basePaid2+bigPaid2+bonusPaid2+perfPaid2;
   });
 
+  // Show warning if no period selected
+  const finWarnEl=document.getElementById('finNoPeriodWarn');
+  if(finWarnEl){
+    finWarnEl.style.display=(!from&&!to)?'flex':'none';
+  }
   document.getElementById('financeSummary').innerHTML=`
     <!-- ROW 1: Support Team -->
     <div class="finance-summary-card">
       <div class="fs-label">💰 Total to Pay Team</div>
-      <div class="fs-value" style="color:#003366">${totalEarned.toLocaleString()}</div>
-      <div class="fs-sub">RWF — Done + Refused visits</div>
+      <div class="fs-value" style="color:#003366">${(totalEarned+totalCeoBonus).toLocaleString()}</div>
+      <div class="fs-sub">RWF — ${totalEarned.toLocaleString()} earnings + ${totalCeoBonus.toLocaleString()} bonuses</div>
     </div>
     <div class="finance-summary-card">
       <div class="fs-label">✅ Approved Reports</div>
@@ -2959,6 +3453,24 @@ function renderFinance(){
       <div class="fs-value" style="color:#E65100">${(totalEarned-totalPaid).toLocaleString()}</div>
       <div class="fs-sub">RWF remaining balance</div>
     </div>
+    <!-- SUPPORT BONUS ROW -->
+    <div class="finance-summary-card" style="border-top:2px solid #1565C0">
+      <div class="fs-label">📤 Support Bonus Requests</div>
+      <div class="fs-value" style="color:#1565C0">${supportBonuses.filter(b=>{
+        if(b.status!=='approved')return false;
+        const{from:finFrom,to:finTo}=getFinDateRange();
+        if(!finFrom&&!finTo)return true;
+        const d=b.approved_at?b.approved_at.substring(0,10):'';
+        return (!finFrom||d>=finFrom)&&(!finTo||d<=finTo);
+      }).reduce((a,b)=>a+(b.approved_amount||0),0).toLocaleString()}</div>
+      <div class="fs-sub">RWF — CEO approved support bonuses</div>
+    </div>
+    <div class="finance-summary-card" style="border-top:2px solid #1565C0">
+      <div class="fs-label">⏳ Support Bonus Pending</div>
+      <div class="fs-value" style="color:#E65100">${supportBonuses.filter(b=>b.status==='pending').length}</div>
+      <div class="fs-sub">requests awaiting approval</div>
+    </div>
+
     <!-- DIVIDER -->
     <div style="grid-column:1/-1;border-top:2px dashed #e0e0e0;margin:4px 0;padding-top:8px">
       <div style="font-size:12px;font-weight:600;color:#003366;margin-bottom:8px">👔 Manager Payments Summary</div>
@@ -2981,8 +3493,8 @@ function renderFinance(){
     </div>
     <div class="finance-summary-card" style="border-top:2px solid #003366">
       <div class="fs-label">✅ CEO Approved Bonuses</div>
-      <div class="fs-value" style="color:#2E7D32">${mgrApprovedBonus.toLocaleString()}</div>
-      <div class="fs-sub">RWF — performance bonuses</div>
+      <div class="fs-value" style="color:#2E7D32">${(mgrApprovedBonus+mgrSupportBonus).toLocaleString()}</div>
+      <div class="fs-sub">👔 ${mgrApprovedBonus.toLocaleString()} mgr + 👤 ${mgrSupportBonus.toLocaleString()} support</div>
     </div>
     <div class="finance-summary-card" style="border-top:2px solid #003366">
       <div class="fs-label">✅ Already Paid (Managers)</div>
@@ -3007,6 +3519,8 @@ function renderFinance(){
     <th style="text-align:center">⏳ Awaiting</th>
     <th style="text-align:center">Progress</th>
     <th style="text-align:right">💰 Earned (RWF)</th>
+    <th style="text-align:right">✅ CEO Bonus</th>
+    <th style="text-align:right;background:#f0f7ff">💵 Total</th>
     <th style="text-align:center">Payment</th>
   </tr></thead><tbody>`;
 
@@ -3184,6 +3698,88 @@ function renderFinance(){
   renderManagerFinanceTable();
 }
 
+function renderSupportBonusApproval(){
+  const wrap=document.getElementById('supportBonusApproval');
+  if(!wrap)return;
+  const{from,to}=getFinDateRange();
+  // Show all support bonuses filtered by period
+  const filtered=supportBonuses.filter(b=>{
+    if(!from&&!to)return true;
+    const d=b.created_at?b.created_at.substring(0,10):'';
+    return(!from||d>=from)&&(!to||d<=to);
+  });
+  const pending=filtered.filter(b=>b.status==='pending');
+  const approved=filtered.filter(b=>b.status==='approved');
+  const rejected=filtered.filter(b=>b.status==='rejected');
+  
+  let html=`<div style="font-size:15px;font-weight:600;color:#1565C0;margin-bottom:12px">
+    📤 Support Bonus Requests 
+    <span style="font-size:12px;font-weight:400;color:#888">(${pending.length} pending, ${approved.length} approved)</span>
+  </div>`;
+  
+  if(filtered.length===0){
+    html+='<div style="color:#aaa;font-size:13px;padding:12px">No bonus requests in this period</div>';
+  } else {
+    filtered.forEach(b=>{
+      const isPending=b.status==='pending';
+      const isApproved=b.status==='approved';
+      html+=`<div style="border:1px solid ${isPending?'#90CAF9':isApproved?'#A5D6A7':'#EF9A9A'};border-radius:8px;padding:12px 16px;background:${isPending?'#E3F2FD':isApproved?'#E8F5E9':'#FFEBEE'};margin-bottom:8px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-weight:600;font-size:14px">👤 ${b.manager_name}</div>
+            <div style="font-size:12px;color:#555;margin-top:2px">Period: <strong>${b.period||'—'}</strong></div>
+            <div style="font-size:13px;color:#1565C0;font-weight:600;margin-top:4px">
+              Requested: ${(b.requested_amount||0).toLocaleString()} RWF
+              ${isApproved?`<span style="color:#2E7D32;margin-left:8px">✅ Approved: ${(b.approved_amount||0).toLocaleString()} RWF</span>`:''}
+              ${b.status==='rejected'?'<span style="color:#C62828;margin-left:8px">❌ Rejected</span>':''}
+            </div>
+            ${b.request_comment?`<div style="font-size:12px;color:#555;font-style:italic;margin-top:4px">"${b.request_comment}"</div>`:''}
+            ${b.approval_comment?`<div style="font-size:12px;color:#003366;margin-top:4px">Response: "${b.approval_comment}"</div>`:''}
+          </div>
+          ${isPending?`<div style="display:flex;flex-direction:column;gap:6px;min-width:200px">
+            <input type="number" id="sbApproveAmt_${b.id}" value="${b.requested_amount||0}" placeholder="Approved amount" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:13px;width:100%">
+            <input type="text" id="sbApproveComment_${b.id}" placeholder="Comment (optional)" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:13px;width:100%">
+            <div style="display:flex;gap:6px">
+              <button onclick="approveSupportBonus(${b.id})" style="flex:1;padding:6px;border-radius:6px;border:none;background:#E8F5E9;color:#2E7D32;cursor:pointer;font-size:12px;font-weight:600">✅ Approve</button>
+              <button onclick="rejectSupportBonus(${b.id})" style="flex:1;padding:6px;border-radius:6px;border:none;background:#FFEBEE;color:#C62828;cursor:pointer;font-size:12px;font-weight:600">❌ Reject</button>
+            </div>
+          </div>`:`<span style="font-size:12px;font-weight:600;padding:4px 12px;border-radius:10px;background:${isApproved?'#2E7D32':'#C62828'};color:white">${b.status.toUpperCase()}</span>`}
+        </div>
+      </div>`;
+    });
+  }
+  wrap.innerHTML=html;
+}
+
+async function approveSupportBonus(id){
+  const amount=parseInt(document.getElementById('sbApproveAmt_'+id).value)||0;
+  const comment=(document.getElementById('sbApproveComment_'+id)||{value:''}).value.trim();
+  if(!amount){showToast('Enter approved amount','error');return;}
+  const{error}=await db.from('manager_bonuses').update({
+    status:'approved',approved_amount:amount,
+    approval_comment:comment,approved_by:currentUser,
+    approved_at:new Date().toISOString()
+  }).eq('id',id);
+  if(error){showToast('⚠️ Failed: '+error.message,'error');return;}
+  const b=supportBonuses.find(b=>b.id===id);
+  if(b){b.status='approved';b.approved_amount=amount;b.approval_comment=comment;}
+  showToast('✅ Support bonus approved!','success');
+  renderFinance();
+}
+
+async function rejectSupportBonus(id){
+  const comment=(document.getElementById('sbApproveComment_'+id)||{value:'Rejected'}).value.trim()||'Rejected';
+  const{error}=await db.from('manager_bonuses').update({
+    status:'rejected',approval_comment:comment,
+    approved_by:currentUser,approved_at:new Date().toISOString()
+  }).eq('id',id);
+  if(error){showToast('⚠️ Failed: '+error.message,'error');return;}
+  const b=supportBonuses.find(b=>b.id===id);
+  if(b){b.status='rejected';b.approval_comment=comment;}
+  showToast('❌ Support bonus rejected','success');
+  renderFinance();
+}
+
 
 
 function getProratedBaseFn(base){
@@ -3255,7 +3851,8 @@ function renderManagerFinanceTable(){
     const approvedBonusAmt=periodApproved.reduce((a,b)=>a+(b.approved_amount||0),0);
     const mgrBaseSalary=(MANAGER_INFO[mgr]||{}).base_salary||MANAGER_BASE;
     const proratedBase=getProratedBaseFn(mgrBaseSalary);
-    const totalToPay=proratedBase+stats.bigClientEarned+approvedBonusAmt;
+    const perfPay=getManagerPerformancePay(mgr);
+    const totalToPay=proratedBase+stats.bigClientEarned+approvedBonusAmt+perfPay.earned;
     grandTotal+=totalToPay;
     const mgrPayStatus=paymentStatus['mgr_'+mgr]||'unpaid';
     // Auto-calculate payment status from component payments
@@ -3328,10 +3925,42 @@ function renderManagerFinanceTable(){
               ${approvedBonusAmt>0?`<button onclick="toggleMgrComponentPay('mgr_bonus_${mgr.replace(/ /g,'__')}')" style="padding:3px 10px;border-radius:12px;border:none;background:${paymentStatus['mgr_bonus_'+mgr.replace(/ /g,'__')]==='paid'?'#E8F5E9':'#FFEBEE'};color:${paymentStatus['mgr_bonus_'+mgr.replace(/ /g,'__')]==='paid'?'#2E7D32':'#C62828'};cursor:pointer;font-size:11px;font-weight:600">${paymentStatus['mgr_bonus_'+mgr.replace(/ /g,'__')]==='paid'?'✅ Paid':'❌ Unpaid'}</button>`:'—'}
             </td>
           </tr>
+          <tr style="border-top:1px solid #e0e0e0">
+            <td style="padding:8px 16px;font-size:13px">📊 Team Performance Bonus</td>
+            <td style="padding:8px 16px;font-size:13px;font-weight:600;text-align:right;color:#9C27B0">
+              ${perfPay.noPeriod?'<span style="color:#E65100;font-size:11px">⚠️ Select period</span>':perfPay.earned>0?perfPay.earned.toLocaleString()+' RWF':'—'}
+              ${perfPay.weeks&&perfPay.weeks.length?perfPay.weeks.map(w=>`<div style="font-size:10px;color:#888;margin-top:2px">${w.label}: ${w.done}/${w.total} = ${w.rate}% → ${w.earned.toLocaleString()} RWF</div>`).join(''):''}
+            </td>
+            <td style="padding:8px 16px;text-align:center">
+              ${perfPay.budget>0?`<span style="font-size:11px;background:#F3E5F5;color:#9C27B0;border-radius:4px;padding:2px 8px">${perfPay.rate}% complete</span>`:'<span style="font-size:11px;color:#aaa">No budget set</span>'}
+            </td>
+            <td style="padding:8px 16px;text-align:center">
+              ${perfPay.earned>0?`<button onclick="toggleMgrComponentPay('mgr_perf_${mgr.replace(/ /g,'__')}')" style="padding:3px 10px;border-radius:12px;border:none;background:${paymentStatus['mgr_perf_'+mgr.replace(/ /g,'__')]==='paid'?'#E8F5E9':'#FFEBEE'};color:${paymentStatus['mgr_perf_'+mgr.replace(/ /g,'__')]==='paid'?'#2E7D32':'#C62828'};cursor:pointer;font-size:11px;font-weight:600">${paymentStatus['mgr_perf_'+mgr.replace(/ /g,'__')]==='paid'?'✅ Paid':'❌ Unpaid'}</button>`:'—'}
+            </td>
+          </tr>
+          <tr style="border-top:1px solid #e0e0e0">
+            <td style="padding:8px 16px;font-size:13px">📊 Performance Bonus</td>
+            <td style="padding:8px 16px;font-size:13px;font-weight:600;text-align:right;color:#9C27B0">
+              ${perfPay.earned>0?perfPay.earned.toLocaleString()+' RWF':'—'}
+              <div style="font-size:10px;color:#aaa">${perfPay.budget>0?perfPay.rate+'% of '+perfPay.budget.toLocaleString()+' budget ('+perfPay.done+'/'+perfPay.total+' done)':'No budget set'}</div>
+            </td>
+            <td style="padding:8px 16px;text-align:center">
+              ${perfPay.noPeriod?'<span style="font-size:11px;color:#E65100">⚠️ Select a period</span>':perfPay.budget>0?`<span style="font-size:11px;background:#F3E5F5;color:#9C27B0;border-radius:4px;padding:2px 8px">${perfPay.rate}% complete</span>`:'<span style="font-size:11px;color:#aaa">Set budget in Managers tab</span>'}
+            </td>
+            <td style="padding:8px 16px;text-align:center">
+              ${perfPay.earned>0?`<button onclick="toggleMgrComponentPay('mgr_perf_${mgr.replace(/ /g,'__')}')" style="padding:3px 10px;border-radius:12px;border:none;background:${paymentStatus['mgr_perf_'+mgr.replace(/ /g,'__')]==='paid'?'#E8F5E9':'#FFEBEE'};color:${paymentStatus['mgr_perf_'+mgr.replace(/ /g,'__')]==='paid'?'#2E7D32':'#C62828'};cursor:pointer;font-size:11px;font-weight:600">${paymentStatus['mgr_perf_'+mgr.replace(/ /g,'__')]==='paid'?'✅ Paid':'❌ Unpaid'}</button>`:'—'}
+            </td>
+          </tr>
           <tr style="background:#003366;border-top:2px solid #1565C0">
-            <td style="padding:10px 16px;font-size:14px;font-weight:700;color:white">TOTAL TO PAY</td>
+            <td style="padding:10px 16px;font-size:14px;font-weight:700;color:white">
+              💵 TOTAL TO PAY
+              <div style="font-size:10px;font-weight:400;color:#90CAF9;margin-top:2px">
+                Base: ${proratedBase.toLocaleString()} + Big Client: ${stats.bigClientEarned.toLocaleString()} + Bonus: ${approvedBonusAmt.toLocaleString()} + Perf: ${perfPay.earned.toLocaleString()}
+              </div>
+            </td>
             <td style="padding:10px 16px;font-size:16px;font-weight:700;color:white;text-align:right">${totalToPay.toLocaleString()} RWF</td>
             <td style="padding:10px 16px;text-align:center">${payBadge}</td>
+            <td></td>
           </tr>
         </table>
       </td>
@@ -3357,7 +3986,11 @@ async function toggleMgrComponentPay(key){
     {onConflict:'name'}
   );
   showToast(next==='paid'?'✅ Marked as Paid':'❌ Marked as Unpaid','success');
-  renderFinance(); // Re-render everything including summary cards
+  renderFinance();
+  isSaving=false;
+  if(!pollTimer) setTimeout(()=>{
+    if(!pollTimer) pollTimer=setInterval(loadAll,60000);
+  },5000);
 }
 
 function toggleManagerPayment(mgr){
@@ -3394,6 +4027,7 @@ function exportManagerFinance(){
     const approvedBonusAmt=periodApproved.reduce((a,b)=>a+(b.approved_amount||0),0);
     const mgrBaseSalary=(MANAGER_INFO[mgr]||{}).base_salary||MANAGER_BASE;
     const proratedBase=getProratedBaseFn(mgrBaseSalary);
+    const perfPay=getManagerPerformancePay(mgr);
     const totalToPay=proratedBase+stats.bigClientEarned+approvedBonusAmt;
     const mgrPayStatus=paymentStatus['mgr_'+mgr]||'unpaid';
     const expBase=getProratedBase();
@@ -3428,7 +4062,7 @@ async function exportFullReport(){
   const rows1=CLIENTS.map((c,i)=>{
     const row=dbData[i]||{};
     return[
-      i,c[0],c[1],c[5]||'—',c[6]||'PHARMACY',
+      i,c[0],c[1],c[5]||'—',c[6]||'—',
       c[2],
       row.status||'Pending',
       row.approval_status||'pending',
@@ -3586,7 +4220,7 @@ function exportFinanceDetail(){
       isBasic?'Basic + 10%':'10% Only',
       c[1],
       c[5]||'—',
-      c[6]||'PHARMACY',
+      c[6]||'—',
       c[2],
       st,
       (row.notes||'—').replace(/,/g,' '),
@@ -3645,7 +4279,7 @@ async function toggleClientActive(idx){
   const{error}=await db.from('clients').update({active:newActive}).eq('id',parseInt(id));
   if(error){showToast('⚠️ Failed: '+error.message,'error');return;}
   showToast(`✅ ${c[1]} ${action}!`,'success');
-  await loadAll();
+  await loadChangesOnly();
   renderAdminClients();
 }
 
@@ -3755,7 +4389,7 @@ This cannot be undone.`))return;
 
   // Reload everything
   setTimeout(async()=>{
-    await loadAll();
+    await loadChangesOnly();
     await loadUsers();
     renderAdminClients();
     renderAdminUsers();
@@ -3856,7 +4490,11 @@ async function toggleClientPaid(idx, paid){
   dbData[idx]={...row,client_paid:paid};
   showToast(paid?`✅ ${c[1]} marked as Paid`:`❌ ${c[1]} marked as Unpaid`,'success');
   renderFinance();
-  pollTimer=setInterval(loadAll,20000);
+  isSaving=false;
+  // Resume poll after 5s delay to avoid immediate re-render
+  if(!pollTimer) setTimeout(()=>{
+    if(!pollTimer) pollTimer=setInterval(loadAll,60000);
+  },5000);
 }
 
 async function financeApprove(idx){
@@ -4033,6 +4671,135 @@ function getManagerTeam(managerName){
   return dbTeam; // Empty = no team assigned (configure in Admin Panel)
 }
 
+function getWeekDates(weekOffset,baseDate){
+  // Get start and end of a week relative to base date
+  // weekOffset: 0=current week, 1=next week, etc.
+  const d=baseDate?new Date(baseDate):new Date();
+  const day=d.getDay(); // 0=Sun
+  const monday=new Date(d);
+  monday.setDate(d.getDate()-(day===0?6:day-1)+(weekOffset*7));
+  const sunday=new Date(monday);
+  sunday.setDate(monday.getDate()+6);
+  const fmt=d=>d.toISOString().substring(0,10);
+  return{from:fmt(monday),to:fmt(sunday)};
+}
+
+function getManagerWeeklyPay(managerName, weekFrom, weekTo){
+  // Calculate manager pay for one specific week
+  // Rate = (Done+Refused+Approved) / Total clients scheduled that week
+  const WEEKLY_BASE=250000;
+  const team=getManagerTeam(managerName);
+  const weekClients=CLIENTS.map((c,i)=>({c,i})).filter(({c,i})=>{
+    if(!c||!team.includes(c[0]))return false;
+    const schedDate=(dbData[i]||{}).rescheduled_date||c[2];
+    if(!schedDate)return false;
+    if(weekFrom&&schedDate<weekFrom)return false;
+    if(weekTo&&schedDate>weekTo)return false;
+    return true;
+  });
+  const total=weekClients.length;
+  if(total===0) return{earned:0,rate:0,done:0,total:0,from:weekFrom,to:weekTo};
+  const done=weekClients.filter(({i})=>{
+    const row=dbData[i]||{};
+    return (row.status==='Done'||row.status==='Refused')&&row.approval_status==='approved';
+  }).length;
+  const rate=Math.round((done/total)*100);
+  const earned=Math.round((done/total)*WEEKLY_BASE);
+  return{earned,rate,done,total,from:weekFrom,to:weekTo};
+}
+
+function getManagerPerformancePay(managerName){
+  const{from,to}=getFinDateRange();
+  if(!from&&!to) return{earned:0,rate:0,done:0,total:0,noPeriod:true,weeks:[]};
+
+  // Split selected period into weeks
+  const start=new Date(from);
+  const end=new Date(to);
+  const weeks=[];
+  let cur=new Date(start);
+  let wNum=1;
+
+  while(cur<=end){
+    const wFrom=cur.toISOString().substring(0,10);
+    const wEnd=new Date(cur);
+    wEnd.setDate(cur.getDate()+6);
+    const wTo=(wEnd>end?end:wEnd).toISOString().substring(0,10);
+    const wPay=getManagerWeeklyPay(managerName,wFrom,wTo);
+    weeks.push({...wPay,week:wNum,label:'Week '+wNum+' ('+wFrom+' → '+wTo+')'});
+    cur.setDate(cur.getDate()+7);
+    wNum++;
+    if(wNum>6)break; // max 6 weeks
+  }
+
+  const totalEarned=weeks.reduce((a,w)=>a+w.earned,0);
+  const totalDone=weeks.reduce((a,w)=>a+w.done,0);
+  const totalClients=weeks.reduce((a,w)=>a+w.total,0);
+  const overallRate=totalClients>0?Math.round((totalDone/totalClients)*100):0;
+
+  return{
+    earned:totalEarned,
+    rate:overallRate,
+    done:totalDone,
+    total:totalClients,
+    weeks,
+    budget:250000 // weekly base
+  };
+}
+
+async function openDateEditWindow(){
+  const from=document.getElementById('dateWindowFrom').value;
+  const to=document.getElementById('dateWindowTo').value;
+  if(!from||!to){showToast('Select from and to dates','error');return;}
+  dateEditWindow={open:true,from,to,openedBy:currentUser};
+  // Save to DB
+  await saveDateEditWindow();
+  updateDateWindowStatus();
+  showToast('✅ Date edit window opened — agents can now set dates','success');
+}
+
+async function closeDateEditWindow(){
+  dateEditWindow={open:false,from:'',to:'',openedBy:''};
+  await saveDateEditWindow();
+  updateDateWindowStatus();
+  showToast('🔒 Date edit window closed','success');
+}
+
+async function saveDateEditWindow(){
+  const val=JSON.stringify(dateEditWindow);
+  await db.from('users').upsert({name:'__date_edit_window__',pin:val,role:'system',active:true},{onConflict:'name'});
+}
+
+function updateDateWindowStatus(){
+  const el=document.getElementById('dateWindowStatus');
+  if(!el)return;
+  if(dateEditWindow.open){
+    el.innerHTML=`<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:6px;padding:8px 12px;font-size:13px">
+      <span style="color:#2E7D32;font-weight:600">🔓 OPEN</span>
+      <span style="color:#555;margin-left:8px">Agents can edit dates from <strong>${dateEditWindow.from}</strong> to <strong>${dateEditWindow.to}</strong></span>
+      <span style="color:#888;font-size:11px;margin-left:8px">Opened by ${dateEditWindow.openedBy}</span>
+    </div>`;
+    // Set inputs
+    const f=document.getElementById('dateWindowFrom');
+    const t=document.getElementById('dateWindowTo');
+    if(f)f.value=dateEditWindow.from;
+    if(t)t.value=dateEditWindow.to;
+  } else {
+    el.innerHTML=`<div style="background:#FFEBEE;border:1px solid #EF9A9A;border-radius:6px;padding:8px 12px;font-size:13px">
+      <span style="color:#C62828;font-weight:600">🔒 CLOSED</span>
+      <span style="color:#555;margin-left:8px">Support agents cannot edit dates</span>
+    </div>`;
+  }
+}
+
+function savePerfBudgets(){saveManagerPerformanceBudget().then(function(){showToast("Budgets saved!","success");renderManagersDashboard();});}
+
+async function saveManagerPerformanceBudget(){
+  await db.from('users').upsert(
+    {name:'__mgr_performance__',pin:JSON.stringify(managerPerformanceBudget),role:'system',active:true},
+    {onConflict:'name'}
+  );
+}
+
 function getManagerClientStats(managerName){
   const team=getManagerTeam(managerName);
   // All clients assigned to this team
@@ -4078,9 +4845,13 @@ function getManagerClientStats(managerName){
 function renderManagersDashboard(){
   const wrap=document.getElementById('managerDashboard');
   if(!wrap)return;
+  const{from:mdFrom,to:mdTo}=getFinDateRange();
+  const mgrWarnEl=document.getElementById('mgrNoPeriodWarn');
+  if(mgrWarnEl) mgrWarnEl.style.display=(!mdFrom&&!mdTo)?'flex':'none';
   const managers=Object.keys(MANAGER_INFO);
   // Show pending bonuses regardless of MANAGER_INFO state
   const pendingNow=managerBonuses.filter(b=>b.status==='pending');
+  const pendingSupportBonuses=supportBonuses.filter(b=>b.status==='pending');
   if(!managers.length){
     // Show at least pending bonuses while manager data loads
     let earlyHtml='<div style="padding:16px 0">';
@@ -4109,10 +4880,10 @@ function renderManagersDashboard(){
       });
       earlyHtml+='</div>';
     }
-    earlyHtml+='<div style="padding:20px;text-align:center;color:#aaa"><div style="font-size:24px">⏳</div><div style="font-size:13px;margin-top:6px">Loading manager cards... <button onclick="loadAll().then(renderManagersDashboard)" style="color:#1565C0;background:none;border:none;cursor:pointer;font-size:13px">Click to retry</button></div></div></div>';
+    earlyHtml+='<div style="padding:20px;text-align:center;color:#aaa"><div style="font-size:24px">⏳</div><div style="font-size:13px;margin-top:6px">Loading manager cards... <button onclick="loadChangesOnly().then(renderManagersDashboard)" style="color:#1565C0;background:none;border:none;cursor:pointer;font-size:13px">Click to retry</button></div></div></div>';
     wrap.innerHTML=earlyHtml;
     // Try to load manager data
-    loadAll().then(()=>{if(Object.keys(MANAGER_INFO).length)renderManagersDashboard();});
+    loadChangesOnly().then(()=>{if(Object.keys(MANAGER_INFO).length)renderManagersDashboard();});
     return;
   }
   let html='<div style="margin-bottom:20px"><h2 style="font-size:18px;font-weight:600;color:#003366;margin-bottom:4px">👔 Board Members & Team Managers</h2><p style="font-size:13px;color:#888">WOLF V1 Deployment — Management Overview</p></div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:24px">';
@@ -4181,6 +4952,33 @@ function renderManagersDashboard(){
 
   // Bonus approval section — always show
   const pendingBonuses=managerBonuses.filter(b=>b.status==='pending');
+  // Support agent bonus requests
+  if(pendingSupportBonuses.length>0){
+    html+=`<div style="background:white;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:16px">
+      <div style="font-size:15px;font-weight:600;color:#1565C0;margin-bottom:12px">📤 Support Agent Requests (${pendingSupportBonuses.length} pending)</div>`;
+    pendingSupportBonuses.forEach(b=>{
+      html+=`<div style="border:1px solid #90CAF9;border-radius:8px;padding:12px 16px;background:#E3F2FD;margin-bottom:8px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-weight:600;font-size:14px">${b.manager_name}</div>
+            <div style="font-size:12px;color:#555;margin-top:2px">Period: <strong>${b.period||'—'}</strong></div>
+            <div style="font-size:13px;color:#1565C0;font-weight:600;margin-top:4px">Requested: ${(b.requested_amount||0).toLocaleString()} RWF</div>
+            ${b.request_comment?`<div style="font-size:12px;color:#555;font-style:italic;margin-top:4px">"${b.request_comment}"</div>`:''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:200px">
+            <input type="number" id="approveAmt_${b.id}" placeholder="Approved amount" value="${b.requested_amount||0}" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:13px;width:100%">
+            <input type="text" id="approveComment_${b.id}" placeholder="Comment (optional)" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:13px;width:100%">
+            <div style="display:flex;gap:6px">
+              <button onclick="approveBonus(${b.id})" style="flex:1;padding:6px;border-radius:6px;border:none;background:#E8F5E9;color:#2E7D32;cursor:pointer;font-size:12px;font-weight:600">✅ Approve</button>
+              <button onclick="rejectBonus(${b.id})" style="flex:1;padding:6px;border-radius:6px;border:none;background:#FFEBEE;color:#C62828;cursor:pointer;font-size:12px;font-weight:600">❌ Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+  }
+
   html+='<div id="bonusPendingSection" style="background:white;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:16px">';
   html+=`<div style="font-size:15px;font-weight:600;color:#E65100;margin-bottom:12px">⏳ Bonus Requests (${managerBonuses.length} total, ${pendingBonuses.length} pending)</div>`;
   if(managerBonuses.length===0){
@@ -4224,10 +5022,52 @@ function renderManagersDashboard(){
     </div>
   </div>`;
 
+  
+  // Performance budget
+  // ── WEEKLY PERFORMANCE PAY SECTION ───────────────────────
+  html+='<div style="background:white;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-top:16px">';
+  html+='<div style="font-size:15px;font-weight:600;color:#9C27B0;margin-bottom:4px">📊 Manager Weekly Performance Pay</div>';
+  html+='<p style="font-size:13px;color:#666;margin-bottom:12px">Each week: <strong>250,000 RWF × (Done+Refused+Approved / Total scheduled that week)</strong></p>';
+  
+  var{from:pFrom,to:pTo}=getFinDateRange();
+  if(!pFrom||!pTo){
+    html+='<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 16px;font-size:13px;color:#E65100">⚠️ Select a period above to see weekly breakdown</div>';
+  } else {
+    Object.keys(MANAGER_INFO||{}).forEach(function(mgr){
+      var perf=getManagerPerformancePay(mgr);
+      html+='<div style="border:1px solid #E1BEE7;border-radius:10px;padding:14px 16px;margin-bottom:12px">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+      html+='<div style="font-size:14px;font-weight:600;color:#003366">'+mgr+'</div>';
+      html+='<div style="font-size:15px;font-weight:700;color:#9C27B0">Total: '+(perf.earned>0?perf.earned.toLocaleString()+' RWF':'0 RWF')+'</div>';
+      html+='</div>';
+      // Weekly breakdown table
+      html+='<table style="width:100%;border-collapse:collapse;font-size:12px">';
+      html+='<tr style="background:#F3E5F5"><th style="padding:6px 10px;text-align:left">Week</th><th style="padding:6px 10px;text-align:center">Done+Ref/Total</th><th style="padding:6px 10px;text-align:center">Rate</th><th style="padding:6px 10px;text-align:right">Earned</th></tr>';
+      (perf.weeks||[]).forEach(function(w){
+        html+='<tr style="border-bottom:1px solid #f0f0f0">';
+        html+='<td style="padding:6px 10px">'+w.label+'</td>';
+        html+='<td style="padding:6px 10px;text-align:center">'+w.done+'/'+w.total+'</td>';
+        html+='<td style="padding:6px 10px;text-align:center"><span style="background:#F3E5F5;color:#9C27B0;padding:2px 8px;border-radius:10px">'+w.rate+'%</span></td>';
+        html+='<td style="padding:6px 10px;text-align:right;font-weight:600;color:#9C27B0">'+(w.earned>0?w.earned.toLocaleString()+' RWF':'—')+'</td>';
+        html+='</tr>';
+      });
+      html+='<tr style="background:#F3E5F5;font-weight:700">';
+      html+='<td style="padding:6px 10px">TOTAL</td>';
+      html+='<td style="padding:6px 10px;text-align:center">'+perf.done+'/'+perf.total+'</td>';
+      html+='<td style="padding:6px 10px;text-align:center">'+perf.rate+'%</td>';
+      html+='<td style="padding:6px 10px;text-align:right;color:#9C27B0">'+(perf.earned>0?perf.earned.toLocaleString()+' RWF':'—')+'</td>';
+      html+='</tr>';
+      html+='</table></div>';
+    });
+  }
+  html+='</div>';
+
   wrap.innerHTML=html;
 }
 
 function renderMyTeam(){
+  const{from:mtFrom,to:mtTo}=getFinDateRange();
+  const myTeamNoPeriod=!mtFrom&&!mtTo;
   // For manager role — their personal dashboard
   const wrap=document.getElementById('myTeamDashboard');
   if(!wrap)return;
@@ -4268,6 +5108,32 @@ function renderMyTeam(){
         <div style="font-size:18px;font-weight:700;color:#2E7D32">${stats.teamEarned.toLocaleString()}</div>
         <div style="font-size:10px;color:#888">RWF (team 10% total)</div>
       </div>
+      ${(()=>{
+        const myPerf=getManagerPerformancePay(currentUser);
+        if(myPerf.noPeriod||!myPerf.weeks||!myPerf.weeks.length) return '<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px;text-align:center;font-size:12px;color:#E65100">⚠️ Select period to see weekly pay</div>';
+        return `<div style="background:#F3E5F5;border-radius:8px;padding:12px">
+          <div style="font-size:11px;color:#888;text-align:center;margin-bottom:6px">📊 Weekly Performance Pay</div>
+          ${myPerf.weeks.map(w=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #E1BEE7">
+            <span style="color:#555">${w.label}</span>
+            <span style="font-weight:600;color:#9C27B0">${w.done}/${w.total} = ${w.rate}% → ${w.earned.toLocaleString()} RWF</span>
+          </div>`).join('')}
+          <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:6px;color:#9C27B0">
+            <span>Total</span>
+            <span>${myPerf.earned.toLocaleString()} RWF</span>
+          </div>
+        </div>`;
+      })()}
+    </div>
+
+    <!-- Total earnings summary -->
+    <div style="background:#003366;border-radius:8px;padding:12px 16px;margin-top:8px;display:flex;justify-content:space-between;align-items:center">
+      <span style="color:white;font-size:13px;font-weight:600">💵 Total Expected Pay</span>
+      <span style="color:#FFD700;font-size:16px;font-weight:700">${(
+        getProratedBaseFn((MANAGER_INFO[currentUser]||{}).base_salary||MANAGER_BASE) +
+        stats.bigClientEarned +
+        managerBonuses.filter(b=>b.manager_name===currentUser&&b.status==='approved').reduce((a,b)=>a+(b.approved_amount||0),0) +
+        getManagerPerformancePay(currentUser).earned
+      ).toLocaleString()} RWF</span>
     </div>
   </div>
 
@@ -4275,9 +5141,14 @@ function renderMyTeam(){
   <div style="background:white;border-radius:12px;padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:16px">
     <div style="font-size:15px;font-weight:600;color:#003366;margin-bottom:12px">👥 My Team Performance</div>
     ${team.map(sup=>{
-      const cl=CLIENTS.map((c,i)=>({c,i})).filter(({c})=>c[0]===sup);
-      const sDone=cl.filter(({i})=>(dbData[i]||{}).status==='Done').length;
-      const sTotal=cl.length;
+      const cl=CLIENTS.map((c,i)=>({c,i})).filter(({c})=>c&&c[0]===sup);
+      const{from:fFrom,to:fTo}=getFinDateRange();
+      const clInRange=fFrom||fTo?cl.filter(({c,i})=>{
+        const d=(dbData[i]||{}).rescheduled_date||c[2];
+        return(!fFrom||d>=fFrom)&&(!fTo||d<=fTo);
+      }):cl;
+      const sDone=clInRange.filter(({i})=>(dbData[i]||{}).status==='Done').length;
+      const sTotal=clInRange.length;
       const sPct=sTotal>0?Math.round((sDone/sTotal)*100):0;
       const sEarned=cl.filter(({i})=>{const r=dbData[i]||{};return (r.status==='Done'||r.status==='Refused')&&r.approval_status==='approved';}).reduce((a,{c})=>a+Math.round(c[3]*0.1),0);
       return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f0f0">
@@ -4305,7 +5176,11 @@ function renderMyTeam(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
       <div>
         <label style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px">Period</label>
-        <input type="text" id="bonusPeriod" placeholder="e.g. May 2026" style="width:100%;padding:8px 12px;border-radius:8px;border:1.5px solid #ddd;font-size:13px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="bonusPeriodFrom" style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid #ddd;font-size:13px">
+          <span style="color:#888;font-size:13px">→</span>
+          <input type="date" id="bonusPeriodTo" style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid #ddd;font-size:13px">
+        </div>
       </div>
       <div>
         <label style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px">Requested Amount (RWF)</label>
@@ -4339,7 +5214,50 @@ function renderMyTeam(){
     </div>`).join('')}
   </div>`:''}`;
 
+    // Period warning for My Team
+  const mtWarnEl=document.getElementById('myteamNoPeriodWarn');
+  if(mtWarnEl) mtWarnEl.style.display=(!mtFrom&&!mtTo)?'flex':'none';
+
   wrap.innerHTML=html;
+}
+
+function toggleSupportBonusForm(id){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.style.display=el.style.display==='none'?'block':'none';
+}
+
+async function submitSupportBonus(skOrSup){
+  if(!skOrSup){showToast('Agent name missing','error');return;}
+  // Accept sk (with __) or full name (with spaces)
+  let sup='';
+  const sk2=String(skOrSup).replace(/ /g,'__');
+  sup=SUPPORTS.find(s=>s.replace(/ /g,'__')===sk2)||String(skOrSup).replace(/__/g,' ');
+  // Fallback to currentUser if support agent submitting for themselves
+  if(!sup) sup=currentUser;
+  if(!sup){showToast('Agent name missing','error');return;}
+  const pfrom=(document.getElementById('sbpf_'+sk2)||{value:''}).value;
+  const pto=(document.getElementById('sbpt_'+sk2)||{value:''}).value;
+  const period=pfrom&&pto?pfrom+' to '+pto:pfrom||pto||'';
+  const amount=parseInt((document.getElementById('sba_'+sup.replace(/ /g,'__'))||{value:'0'}).value)||0;
+  const comment=(document.getElementById('sbc_'+sup.replace(/ /g,'__'))||{value:''}).value.trim();
+  if(!period){showToast('Select a date range','error');return;}
+  if(!amount){showToast('Enter requested amount','error');return;}
+  if(!comment){showToast('Add a comment/justification','error');return;}
+  showToast('Submitting...','saving');
+  const{data,error}=await db.from('manager_bonuses').insert({
+    manager_name:sup,
+    period,
+    base_amount:0,
+    requested_amount:amount,
+    request_comment:comment,
+    status:'pending',
+    type:'support'
+  }).select();
+  if(error){showToast('⚠️ Failed: '+error.message,'error');return;}
+  supportBonuses.unshift(data[0]);
+  showToast('✅ Request submitted to coordinator!','success');
+  renderAgents();
 }
 
 async function resubmitBonus(id){
@@ -4350,7 +5268,12 @@ async function resubmitBonus(id){
   const periodEl=document.getElementById('bonusPeriod');
   const amtEl=document.getElementById('bonusAmount');
   const commentEl=document.getElementById('bonusComment');
-  if(periodEl) periodEl.value=b.period||'';
+  // Parse existing period back to dates if possible
+  if(document.getElementById('bonusPeriodFrom')&&b.period&&b.period.includes(' to ')){
+    const parts=b.period.split(' to ');
+    document.getElementById('bonusPeriodFrom').value=parts[0]||'';
+    document.getElementById('bonusPeriodTo').value=parts[1]||'';
+  }
   if(amtEl) amtEl.value=b.requested_amount||'';
   if(commentEl) commentEl.value=b.request_comment||'';
   // Reset in DB to pending
@@ -4369,10 +5292,12 @@ async function resubmitBonus(id){
 }
 
 async function submitBonusRequest(){
-  const period=document.getElementById('bonusPeriod').value.trim();
+  const pfrom2=document.getElementById('bonusPeriodFrom')?.value||'';
+  const pto2=document.getElementById('bonusPeriodTo')?.value||'';
+  const period=pfrom2&&pto2?pfrom2+' to '+pto2:pfrom2||pto2||'';
   const amount=parseInt(document.getElementById('bonusAmount').value)||0;
   const comment=document.getElementById('bonusComment').value.trim();
-  if(!period){showToast('Please enter the period','error');return;}
+  if(!period){showToast('Please select a date range','error');return;}
   if(!amount){showToast('Please enter requested amount','error');return;}
   const stats=getManagerClientStats(currentUser);
   showToast('Submitting request...','saving');
@@ -4658,6 +5583,43 @@ async function resetAccessControl(){
   renderAccessControlUI();
 }
 
+// ── LOCAL CACHE (static data only) ────────────────────────
+const CACHE_KEY='wolfv1_static_v2';
+const CACHE_TTL=24*60*60*1000; // 24 hours
+
+function saveStaticCache(staticClients,managers,teams,config){
+  try{
+    localStorage.setItem(CACHE_KEY,JSON.stringify({
+      ts:Date.now(),sc:staticClients,mg:managers,ta:teams,cfg:config
+    }));
+    console.log('Cache saved:',staticClients.length,'clients');
+  }catch(e){console.warn('Cache save:',e.message);}
+}
+
+function loadStaticCache(){
+  try{
+    const raw=localStorage.getItem(CACHE_KEY);
+    if(!raw)return null;
+    const c=JSON.parse(raw);
+    if(Date.now()-c.ts>CACHE_TTL){localStorage.removeItem(CACHE_KEY);return null;}
+    console.log('Cache hit:',c.sc?.length,'clients');
+    return c;
+  }catch(e){return null;}
+}
+
+function saveStaticCache(staticClients,managers,teams,config){
+  try{
+    localStorage.setItem(CACHE_KEY,JSON.stringify({
+      ts:Date.now(),sc:staticClients,mg:managers,ta:teams,cfg:config
+    }));
+    console.log('Cache saved:',staticClients.length,'clients');
+  }catch(e){console.warn('Cache save:',e.message);}
+}
+
+function clearStaticCache(){
+  try{localStorage.removeItem(CACHE_KEY);showToast('Cache cleared','success');}catch(e){}
+}
+
 // ── INIT ───────────────────────────────────────────────────
 function showRoleBadge(name){
   const badge=document.getElementById('roleBadge');
@@ -4676,23 +5638,47 @@ function showRoleBadge(name){
 }
 
 async function loadLoginDropdown(){
-  const{data}=await db.from('users').select('id,name,pin,role,active').order('name');
-  allUsers=data||[];
   const sel=document.getElementById('loginName');
-  sel.innerHTML='<option value="">-- Choose your name --</option>';
-  allUsers.forEach(u=>{
-    if(u.role==='system')return;
-    if(u.name&&u.name.startsWith('__'))return;
-    if(u.active===false)return;
-    const o=document.createElement('option');
-    o.value=u.name;
-    o.textContent=(u.role==='coordinator'?'👑 ':u.role==='manager'?'👔 ':'')+u.name;
-    sel.appendChild(o);
-  });
+  if(!sel)return;
+  sel.innerHTML='<option value="">⏳ Loading...</option>';
+  try{
+    // Use direct fetch to avoid DataCloneError
+    const url=SUPABASE_URL+'/rest/v1/users?select=id,name,pin,role,active&order=name';
+    const resp=await fetch(url,{
+      headers:{
+        'apikey':SUPABASE_KEY,
+        'Authorization':'Bearer '+SUPABASE_KEY
+      }
+    });
+    const data=await resp.json();
+    if(!data||!Array.isArray(data)||data.length===0){
+      throw new Error('No users returned');
+    }
+    allUsers=data;
+    sel.innerHTML='<option value="">-- Choose your name --</option>';
+    allUsers.forEach(u=>{
+      if(u.role==='system')return;
+      if(u.name&&u.name.startsWith('__'))return;
+      if(u.active===false)return;
+      const o=document.createElement('option');
+      o.value=u.name;
+      o.textContent=(u.role==='coordinator'?'👑 ':u.role==='manager'?'👔 ':'')+u.name;
+      sel.appendChild(o);
+    });
+  }catch(e){
+    console.error('loadLoginDropdown error:',e.message);
+    sel.innerHTML='<option value="">⚠️ Click to retry</option>';
+    sel.addEventListener('click',function retry(){
+      sel.removeEventListener('click',retry);
+      loadLoginDropdown();
+    });
+  }
 }
 
 // Amount preview for add client
 document.addEventListener('DOMContentLoaded',()=>{
+  // Pre-warm Supabase connection silently
+  db.from('users').select('count').limit(1).then(()=>{}).catch(()=>{});
   const amtInput=document.getElementById('nc_amount');
   if(amtInput)amtInput.addEventListener('input',updatePickPreview);
   // Show login form immediately, load dropdown in background
